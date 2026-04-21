@@ -1,0 +1,47 @@
+PODS:
+  - flutter_local_notifications (0.0.1):
+    - FlutterMacOS
+  - flutter_timezone (0.1.0):
+    - FlutterMacOS
+  - FlutterMacOS (1.0.0)
+  - printing (1.0.0):
+    - FlutterMacOS
+  - share_plus (0.0.1):
+    - FlutterMacOS
+  - sqflite_darwin (0.0.4):
+    - Flutter
+    - FlutterMacOS
+
+DEPENDENCIES:
+  - flutter_local_notifications (from `Flutter/ephemeral/.symlinks/plugins/flutter_local_notifications/macos`)
+  - flutter_timezone (from `Flutter/ephemeral/.symlinks/plugins/flutter_timezone/macos`)
+  - FlutterMacOS (from `Flutter/ephemeral`)
+  - printing (from `Flutter/ephemeral/.symlinks/plugins/printing/macos`)
+  - share_plus (from `Flutter/ephemeral/.symlinks/plugins/share_plus/macos`)
+  - sqflite_darwin (from `Flutter/ephemeral/.symlinks/plugins/sqflite_darwin/darwin`)
+
+EXTERNAL SOURCES:
+  flutter_local_notifications:
+    :path: Flutter/ephemeral/.symlinks/plugins/flutter_local_notifications/macos
+  flutter_timezone:
+    :path: Flutter/ephemeral/.symlinks/plugins/flutter_timezone/macos
+  FlutterMacOS:
+    :path: Flutter/ephemeral
+  printing:
+    :path: Flutter/ephemeral/.symlinks/plugins/printing/macos
+  share_plus:
+    :path: Flutter/ephemeral/.symlinks/plugins/share_plus/macos
+  sqflite_darwin:
+    :path: Flutter/ephemeral/.symlinks/plugins/sqflite_darwin/darwin
+
+SPEC CHECKSUMS:
+  flutter_local_notifications: 4ccab5b7a22835214a6672e3f9c5e8ae207dab36
+  flutter_timezone: 62400baa441155f2a4144188648f2ff861649747
+  FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
+  printing: 1dd6a1fce2209ec240698e2439a4adbb9b427637
+  share_plus: 1fa619de8392a4398bfaf176d441853922614e89
+  sqflite_darwin: 5a7236e3b501866c1c9befc6771dfd73ffb8702d
+
+PODFILE CHECKSUM: 54d867c82ac51cbd61b565781b9fada492027009
+
+COCOAPODS: 1.16.2
