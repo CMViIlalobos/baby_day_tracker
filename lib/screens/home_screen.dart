@@ -120,6 +120,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _toggleFeed() async {
     if (_activeFeeding != null) {
+      final confirmed = await _showEndConfirmation('feeding');
+      if (!confirmed) return;
+
       final duration = DateTime.now().difference(_activeFeeding!.timestamp);
       final updatedEvent = _activeFeeding!.copyWith(
         feedingDuration: duration.inMinutes,
@@ -127,28 +130,30 @@ class _HomeScreenState extends State<HomeScreen> {
       await DatabaseHelper.instance.updateEvent(updatedEvent);
       await _loadData();
       await widget.onChanged();
-      if (!mounted) return;
 
       final hours = duration.inHours;
       final minutes = duration.inMinutes % 60;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '🍼 Feeding ended (${hours > 0 ? "$hours hr $minutes min" : "${minutes}min"}',
+      if (duration.inMinutes > 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Feeding ended (${hours > 0 ? "$hours hr $minutes min" : "${minutes}min"}',
+            ),
           ),
-          action: SnackBarAction(
-            label: 'Undo',
-            onPressed: () => _undoFeedEnd(updatedEvent),
-          ),
-        ),
-      );
+        );
+      }
     } else {
       final event = BabyEvent(
         type: EventType.feeding,
         timestamp: DateTime.now(),
         feedingDuration: null,
       );
-      await _saveWithUndo(event, '🍼 Feeding started');
+      await DatabaseHelper.instance.insertEvent(event);
+      await _loadData();
+      await widget.onChanged();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('🍼 Feeding started')));
     }
   }
 
@@ -199,11 +204,19 @@ class _HomeScreenState extends State<HomeScreen> {
       timestamp: DateTime.now(),
       diaperType: type,
     );
-    await _saveWithUndo(event, '💩 $type diaper');
+    await DatabaseHelper.instance.insertEvent(event);
+    await _loadData();
+    await widget.onChanged();
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('💩 $type diaper logged')));
   }
 
   Future<void> _toggleSleep() async {
     if (_activeSleep != null) {
+      final confirmed = await _showEndConfirmation('sleep');
+      if (!confirmed) return;
+
       final duration = DateTime.now().difference(_activeSleep!.timestamp);
       final updatedEvent = _activeSleep!.copyWith(
         sleepDuration: duration.inMinutes,
@@ -211,29 +224,55 @@ class _HomeScreenState extends State<HomeScreen> {
       await DatabaseHelper.instance.updateEvent(updatedEvent);
       await _loadData();
       await widget.onChanged();
-      if (!mounted) return;
 
       final hours = duration.inHours;
       final minutes = duration.inMinutes % 60;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '😴 Sleep ended (${hours > 0 ? "$hours hr $minutes min" : "${minutes}min"}',
+      if (duration.inMinutes > 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '😴 Sleep ended (${hours > 0 ? "$hours hr $minutes min" : "${minutes}min"}',
+            ),
           ),
-          action: SnackBarAction(
-            label: 'Undo',
-            onPressed: () => _undoSleepEnd(updatedEvent),
-          ),
-        ),
-      );
+        );
+      }
     } else {
       final event = BabyEvent(
         type: EventType.sleep,
         timestamp: DateTime.now(),
         sleepDuration: null,
       );
-      await _saveWithUndo(event, '😴 Sleep started');
+      await DatabaseHelper.instance.insertEvent(event);
+      await _loadData();
+      await widget.onChanged();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('😴 Sleep started')));
     }
+  }
+
+  Future<bool> _showEndConfirmation(String type) async {
+    return await showDialog<bool>(
+          context: context,
+          builder:
+              (context) => AlertDialog(
+                title: Text('End $type?'),
+                content: Text(
+                  'Are you sure you want to end this $type session?',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('Cancel'),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text('End'),
+                  ),
+                ],
+              ),
+        ) ??
+        false;
   }
 
   Future<void> _openMedicineForm() async {
@@ -247,44 +286,6 @@ class _HomeScreenState extends State<HomeScreen> {
       await _loadData();
       await widget.onChanged();
     }
-  }
-
-  Future<void> _saveWithUndo(BabyEvent event, String message) async {
-    await DatabaseHelper.instance.insertEvent(event);
-    await _loadData();
-    await widget.onChanged();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        action: SnackBarAction(
-          label: 'Undo',
-          onPressed: () => _undoLastEvent(event),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _undoLastEvent(BabyEvent event) async {
-    if (event.id != null) {
-      await DatabaseHelper.instance.deleteEvent(event.id!);
-      await _loadData();
-      await widget.onChanged();
-    }
-  }
-
-  Future<void> _undoSleepEnd(BabyEvent originalEvent) async {
-    final reverted = originalEvent.copyWith(sleepDuration: null);
-    await DatabaseHelper.instance.updateEvent(reverted);
-    await _loadData();
-    await widget.onChanged();
-  }
-
-  Future<void> _undoFeedEnd(BabyEvent originalEvent) async {
-    final reverted = originalEvent.copyWith(feedingDuration: null);
-    await DatabaseHelper.instance.updateEvent(reverted);
-    await _loadData();
-    await widget.onChanged();
   }
 
   Widget _buildQuickOption(
@@ -584,7 +585,7 @@ class _StatusCards extends StatelessWidget {
             label: 'Feeding',
             value:
                 activeFeeding != null
-                    ? '🍼 Active'
+                    ? '🔥 Active'
                     : (lastFeeding != null
                         ? getTimeAgo(lastFeeding!.timestamp)
                         : '—'),
