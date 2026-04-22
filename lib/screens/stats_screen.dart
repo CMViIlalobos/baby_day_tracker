@@ -491,7 +491,12 @@ class _StatsData {
       if ((lastMedicine!.medicineUnit ?? '').isNotEmpty)
         lastMedicine!.medicineUnit,
     ].join(' ');
-    return dose.isEmpty ? time : '$time • $dose';
+
+    String result = dose.isEmpty ? time : '$time $dose';
+    if (result.length > 25) {
+      result = result.substring(0, 22) + '...';
+    }
+    return result;
   }
 
   static int _calculateStreak(List<BabyEvent> allEvents) {

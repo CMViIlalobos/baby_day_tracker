@@ -130,18 +130,6 @@ class _HomeScreenState extends State<HomeScreen> {
       await DatabaseHelper.instance.updateEvent(updatedEvent);
       await _loadData();
       await widget.onChanged();
-
-      final hours = duration.inHours;
-      final minutes = duration.inMinutes % 60;
-      if (duration.inMinutes > 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Feeding ended (${hours > 0 ? "$hours hr $minutes min" : "${minutes}min"}',
-            ),
-          ),
-        );
-      }
     } else {
       final event = BabyEvent(
         type: EventType.feeding,
@@ -151,9 +139,6 @@ class _HomeScreenState extends State<HomeScreen> {
       await DatabaseHelper.instance.insertEvent(event);
       await _loadData();
       await widget.onChanged();
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('🍼 Feeding started')));
     }
   }
 
@@ -207,9 +192,6 @@ class _HomeScreenState extends State<HomeScreen> {
     await DatabaseHelper.instance.insertEvent(event);
     await _loadData();
     await widget.onChanged();
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('💩 $type diaper logged')));
   }
 
   Future<void> _toggleSleep() async {
@@ -224,18 +206,6 @@ class _HomeScreenState extends State<HomeScreen> {
       await DatabaseHelper.instance.updateEvent(updatedEvent);
       await _loadData();
       await widget.onChanged();
-
-      final hours = duration.inHours;
-      final minutes = duration.inMinutes % 60;
-      if (duration.inMinutes > 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '😴 Sleep ended (${hours > 0 ? "$hours hr $minutes min" : "${minutes}min"}',
-            ),
-          ),
-        );
-      }
     } else {
       final event = BabyEvent(
         type: EventType.sleep,
@@ -245,9 +215,6 @@ class _HomeScreenState extends State<HomeScreen> {
       await DatabaseHelper.instance.insertEvent(event);
       await _loadData();
       await widget.onChanged();
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('😴 Sleep started')));
     }
   }
 
@@ -323,10 +290,6 @@ class _HomeScreenState extends State<HomeScreen> {
     await DatabaseHelper.instance.deleteEvent(event.id!);
     await _loadData();
     await widget.onChanged();
-    if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Event deleted')));
   }
 
   Future<void> _saveReminder(ReminderItem reminder) async {
@@ -339,11 +302,6 @@ class _HomeScreenState extends State<HomeScreen> {
     await ReminderRepository.instance.saveReminders(_sortReminders(updated));
     if (!mounted) return;
     setState(() => _reminders = _sortReminders(updated));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(index >= 0 ? 'Reminder updated' : 'Reminder added'),
-      ),
-    );
   }
 
   Future<void> _deleteReminder(ReminderItem reminder) async {
@@ -351,9 +309,6 @@ class _HomeScreenState extends State<HomeScreen> {
     await ReminderRepository.instance.saveReminders(updated);
     if (!mounted) return;
     setState(() => _reminders = updated);
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Reminder deleted')));
   }
 
   Future<void> _openReminderEditor({

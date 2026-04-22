@@ -171,7 +171,6 @@ class HomeStyleInfoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      constraints: const BoxConstraints(minHeight: 164),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: gradientColors,
@@ -190,6 +189,7 @@ class HomeStyleInfoCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Container(
             width: 42,
@@ -218,7 +218,7 @@ class HomeStyleInfoCard extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: valueColor,
-              fontSize: 22,
+              fontSize: 18,
               fontWeight: FontWeight.w800,
             ),
           ),
@@ -229,7 +229,7 @@ class HomeStyleInfoCard extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: subtitleColor,
-              fontSize: 12,
+              fontSize: 11,
               fontWeight: FontWeight.w500,
             ),
           ),
