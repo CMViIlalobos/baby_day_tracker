@@ -32,7 +32,13 @@ class _HomeScreenState extends State<HomeScreen> {
   List<BabyEvent> _todayEvents = const [];
   List<ReminderItem> _reminders = const [];
   List<InventoryItem> _lowStockItems = const [];
-  _HomeInsights _insights = _HomeInsights.empty();
+
+  BabyEvent? _lastFeeding;
+  BabyEvent? _lastDiaper;
+  BabyEvent? _lastSleep;
+  BabyEvent? _activeSleep;
+  BabyEvent? _activeFeeding;
+
   late DateTime _focusedMonth;
   late DateTime _selectedDate;
 
@@ -54,17 +60,32 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadData() async {
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
     try {
       final events = await DatabaseHelper.instance.getTodayEvents();
       final lastFeeding = await DatabaseHelper.instance.getLatestEventByType(
         EventType.feeding,
       );
+      final lastDiaper = await DatabaseHelper.instance.getLatestEventByType(
+        EventType.diaper,
+      );
       final lastSleep = await DatabaseHelper.instance.getLatestEventByType(
         EventType.sleep,
       );
+
+      BabyEvent? activeSleep;
+      if (lastSleep != null &&
+          (lastSleep.sleepDuration == null || lastSleep.sleepDuration == 0)) {
+        activeSleep = lastSleep;
+      }
+
+      BabyEvent? activeFeeding;
+      if (lastFeeding != null &&
+          (lastFeeding.feedingDuration == null ||
+              lastFeeding.feedingDuration == 0)) {
+        activeFeeding = lastFeeding;
+      }
+
       final lowStockItems = await DatabaseHelper.instance.getLowStockItems();
       final reminders = await ReminderRepository.instance.loadReminders();
 
@@ -74,12 +95,11 @@ class _HomeScreenState extends State<HomeScreen> {
         _todayEvents = events;
         _lowStockItems = lowStockItems;
         _reminders = _sortReminders(reminders);
-        _insights = _HomeInsights(
-          lastFeeding: lastFeeding,
-          lastSleep: lastSleep,
-          lowStockCount: lowStockItems.length,
-          activeReminderCount: reminders.length,
-        );
+        _lastFeeding = lastFeeding;
+        _lastDiaper = lastDiaper;
+        _lastSleep = lastSleep;
+        _activeSleep = activeSleep;
+        _activeFeeding = activeFeeding;
         _isLoading = false;
       });
     } catch (error) {
@@ -89,17 +109,198 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _openAddEventSheet(EventType initialType) async {
-    final created = await showModalBottomSheet<bool>(
+  String _getTimeAgo(DateTime? timestamp) {
+    if (timestamp == null) return '';
+    final diff = DateTime.now().difference(timestamp);
+    if (diff.inDays > 0) return '${diff.inDays}d ago';
+    if (diff.inHours > 0) return '${diff.inHours}h ago';
+    if (diff.inMinutes > 0) return '${diff.inMinutes}m ago';
+    return 'Just now';
+  }
+
+  Future<void> _toggleFeed() async {
+    if (_activeFeeding != null) {
+      final duration = DateTime.now().difference(_activeFeeding!.timestamp);
+      final updatedEvent = _activeFeeding!.copyWith(
+        feedingDuration: duration.inMinutes,
+      );
+      await DatabaseHelper.instance.updateEvent(updatedEvent);
+      await _loadData();
+      await widget.onChanged();
+      if (!mounted) return;
+
+      final hours = duration.inHours;
+      final minutes = duration.inMinutes % 60;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '🍼 Feeding ended (${hours > 0 ? "$hours hr $minutes min" : "${minutes}min"}',
+          ),
+          action: SnackBarAction(
+            label: 'Undo',
+            onPressed: () => _undoFeedEnd(updatedEvent),
+          ),
+        ),
+      );
+    } else {
+      final event = BabyEvent(
+        type: EventType.feeding,
+        timestamp: DateTime.now(),
+        feedingDuration: null,
+      );
+      await _saveWithUndo(event, '🍼 Feeding started');
+    }
+  }
+
+  Future<void> _twoTapDiaper() async {
+    final type = await showModalBottomSheet<String>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder:
+          (context) => SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 12),
+                const Text(
+                  'Diaper Type',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
+                _buildQuickOption(
+                  Icons.water_drop,
+                  'Wet',
+                  Colors.blue,
+                  () => Navigator.pop(context, 'Wet'),
+                ),
+                _buildQuickOption(
+                  Icons.water_drop,
+                  'Dirty',
+                  Colors.brown,
+                  () => Navigator.pop(context, 'Dirty'),
+                ),
+                _buildQuickOption(
+                  Icons.water_drop,
+                  'Both',
+                  Colors.green,
+                  () => Navigator.pop(context, 'Both'),
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+    );
+    if (type == null) return;
+
+    final event = BabyEvent(
+      type: EventType.diaper,
+      timestamp: DateTime.now(),
+      diaperType: type,
+    );
+    await _saveWithUndo(event, '💩 $type diaper');
+  }
+
+  Future<void> _toggleSleep() async {
+    if (_activeSleep != null) {
+      final duration = DateTime.now().difference(_activeSleep!.timestamp);
+      final updatedEvent = _activeSleep!.copyWith(
+        sleepDuration: duration.inMinutes,
+      );
+      await DatabaseHelper.instance.updateEvent(updatedEvent);
+      await _loadData();
+      await widget.onChanged();
+      if (!mounted) return;
+
+      final hours = duration.inHours;
+      final minutes = duration.inMinutes % 60;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '😴 Sleep ended (${hours > 0 ? "$hours hr $minutes min" : "${minutes}min"}',
+          ),
+          action: SnackBarAction(
+            label: 'Undo',
+            onPressed: () => _undoSleepEnd(updatedEvent),
+          ),
+        ),
+      );
+    } else {
+      final event = BabyEvent(
+        type: EventType.sleep,
+        timestamp: DateTime.now(),
+        sleepDuration: null,
+      );
+      await _saveWithUndo(event, '😴 Sleep started');
+    }
+  }
+
+  Future<void> _openMedicineForm() async {
+    final result = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (_) => AddEventBottomSheet(initialType: initialType),
+      builder: (_) => const _MedicineFormSheet(),
     );
-    if (created == true) {
+    if (result == true) {
       await _loadData();
       await widget.onChanged();
     }
+  }
+
+  Future<void> _saveWithUndo(BabyEvent event, String message) async {
+    await DatabaseHelper.instance.insertEvent(event);
+    await _loadData();
+    await widget.onChanged();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () => _undoLastEvent(event),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _undoLastEvent(BabyEvent event) async {
+    if (event.id != null) {
+      await DatabaseHelper.instance.deleteEvent(event.id!);
+      await _loadData();
+      await widget.onChanged();
+    }
+  }
+
+  Future<void> _undoSleepEnd(BabyEvent originalEvent) async {
+    final reverted = originalEvent.copyWith(sleepDuration: null);
+    await DatabaseHelper.instance.updateEvent(reverted);
+    await _loadData();
+    await widget.onChanged();
+  }
+
+  Future<void> _undoFeedEnd(BabyEvent originalEvent) async {
+    final reverted = originalEvent.copyWith(feedingDuration: null);
+    await DatabaseHelper.instance.updateEvent(reverted);
+    await _loadData();
+    await widget.onChanged();
+  }
+
+  Widget _buildQuickOption(
+    IconData icon,
+    String label,
+    Color color,
+    VoidCallback onTap,
+  ) {
+    return ListTile(
+      leading: CircleAvatar(
+        backgroundColor: color.withOpacity(0.2),
+        child: Icon(icon, color: color),
+      ),
+      title: Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+      onTap: onTap,
+    );
   }
 
   Future<void> _openEditEventSheet(BabyEvent event) async {
@@ -118,37 +319,25 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _deleteEvent(BabyEvent event) async {
     if (event.id == null) return;
-    try {
-      await DatabaseHelper.instance.deleteEvent(event.id!);
-      await _loadData();
-      await widget.onChanged();
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Event deleted')));
-    } catch (error) {
-      _showError(error);
-    }
+    await DatabaseHelper.instance.deleteEvent(event.id!);
+    await _loadData();
+    await widget.onChanged();
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Event deleted')));
   }
 
   Future<void> _saveReminder(ReminderItem reminder) async {
     final updated = [..._reminders];
     final index = updated.indexWhere((item) => item.id == reminder.id);
-    if (index >= 0) {
+    if (index >= 0)
       updated[index] = reminder;
-    } else {
+    else
       updated.add(reminder);
-    }
-
-    final sorted = _sortReminders(updated);
-    await ReminderRepository.instance.saveReminders(sorted);
+    await ReminderRepository.instance.saveReminders(_sortReminders(updated));
     if (!mounted) return;
-
-    setState(() {
-      _reminders = sorted;
-      _insights = _insights.copyWith(activeReminderCount: sorted.length);
-    });
-
+    setState(() => _reminders = _sortReminders(updated));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(index >= 0 ? 'Reminder updated' : 'Reminder added'),
@@ -160,12 +349,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final updated = _reminders.where((item) => item.id != reminder.id).toList();
     await ReminderRepository.instance.saveReminders(updated);
     if (!mounted) return;
-
-    setState(() {
-      _reminders = updated;
-      _insights = _insights.copyWith(activeReminderCount: updated.length);
-    });
-
+    setState(() => _reminders = updated);
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('Reminder deleted')));
@@ -182,19 +366,9 @@ class _HomeScreenState extends State<HomeScreen> {
       builder:
           (_) => _ReminderEditorSheet(initialDate: date, reminder: reminder),
     );
-
-    if (result == null) {
-      return;
-    }
-
-    if (result.deleted && reminder != null) {
-      await _deleteReminder(reminder);
-      return;
-    }
-
-    if (result.reminder != null) {
-      await _saveReminder(result.reminder!);
-    }
+    if (result == null) return;
+    if (result.deleted && reminder != null) await _deleteReminder(reminder);
+    if (result.reminder != null) await _saveReminder(result.reminder!);
   }
 
   List<ReminderItem> _sortReminders(List<ReminderItem> reminders) {
@@ -207,8 +381,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   List<ReminderItem> _remindersForDay(DateTime day) {
-    final items = _reminders.where((reminder) => reminder.occursOnDay(day));
-    return items.toList()..sort((a, b) => a.dateTime.compareTo(b.dateTime));
+    return _reminders.where((reminder) => reminder.occursOnDay(day)).toList()
+      ..sort((a, b) => a.dateTime.compareTo(b.dateTime));
   }
 
   List<_ScheduledReminder> _upcomingAppointments() {
@@ -231,30 +405,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   ).isBefore(startOfToday),
             )
             .toList();
-
     upcoming.sort((a, b) => a.occurrence.compareTo(b.occurrence));
     return upcoming.take(5).toList();
   }
 
-  List<ReminderItem> _dueTodayReminders() {
-    final today = DateTime.now();
-    return _remindersForDay(today);
-  }
-
-  String _getTimeAgo(DateTime? timestamp) {
-    if (timestamp == null) return '';
-    final difference = DateTime.now().difference(timestamp);
-
-    if (difference.inDays > 0) {
-      return '${difference.inDays} ${difference.inDays == 1 ? 'day' : 'days'} ago';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours} ${difference.inHours == 1 ? 'hour' : 'hours'} ago';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes} minutes ago';
-    } else {
-      return 'Just now';
-    }
-  }
+  List<ReminderItem> _dueTodayReminders() => _remindersForDay(DateTime.now());
 
   void _showError(Object error) {
     ScaffoldMessenger.of(
@@ -267,192 +422,156 @@ class _HomeScreenState extends State<HomeScreen> {
     final dueToday = _dueTodayReminders();
     final upcomingAppointments = _upcomingAppointments();
     final greetingName =
-        widget.babyName.trim().isEmpty ? 'your baby' : widget.babyName.trim();
+        widget.babyName.trim().isEmpty ? 'Baby' : widget.babyName.trim();
 
     return RefreshIndicator(
       onRefresh: _loadData,
-      child: ListView(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
-        children: [
-          _FigmaWelcomeHeader(
-            babyName: greetingName,
-            date: DateTime.now(),
-            profile: widget.profile,
-          ),
-          const SizedBox(height: 16),
-          _FigmaQuickStatsGrid(
-            lastFeeding: _insights.lastFeeding,
-            lastSleep: _insights.lastSleep,
-            getTimeAgo: _getTimeAgo,
-          ),
-          const SizedBox(height: 16),
-          if (_lowStockItems.isNotEmpty) ...[
-            _FigmaLowStockAlert(items: _lowStockItems),
-            const SizedBox(height: 16),
-          ],
-          if (dueToday.isNotEmpty) ...[
-            _FigmaTodaysReminders(reminders: dueToday),
-            const SizedBox(height: 16),
-          ],
-          _FigmaQuickActionsGrid(onActionTap: _openAddEventSheet),
-          const SizedBox(height: 16),
-          _FigmaUpcomingAppointments(
-            appointments: upcomingAppointments,
-            selectedDate: _selectedDate,
-            focusedMonth: _focusedMonth,
-            reminders: _reminders,
-            onMonthChanged: (month) {
-              setState(() => _focusedMonth = DateTime(month.year, month.month));
-            },
-            onDateSelected: (day) {
-              setState(() {
-                _selectedDate = DateTime(day.year, day.month, day.day);
-                _focusedMonth = DateTime(day.year, day.month);
-              });
-            },
-            onAddReminder: () => _openReminderEditor(date: _selectedDate),
-          ),
-          const SizedBox(height: 24),
-          Row(
-            children: [
-              Text(
-                "Today's timeline",
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-              ),
-              const Spacer(),
-              if (_todayEvents.isNotEmpty)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    '${_todayEvents.length} events',
-                    style: TextStyle(
-                      color: Colors.grey.shade700,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          if (_isLoading)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 48),
-              child: Center(child: CircularProgressIndicator()),
-            )
-          else if (_todayEvents.isEmpty)
-            _FigmaEmptyTimeline(
-              onAddEvent: () => _openAddEventSheet(EventType.feeding),
-            )
-          else
-            ..._todayEvents.map(
-              (event) => EventTimelineItem(
-                event: event,
-                onTap: () => _openEditEventSheet(event),
-                onDelete: () => _deleteEvent(event),
-              ),
+        child: Column(
+          children: [
+            _Header(babyName: greetingName, profile: widget.profile),
+            const SizedBox(height: 20),
+
+            _StatusCards(
+              lastFeeding: _lastFeeding,
+              lastDiaper: _lastDiaper,
+              activeSleep: _activeSleep,
+              activeFeeding: _activeFeeding,
+              lastSleep: _lastSleep,
+              getTimeAgo: _getTimeAgo,
             ),
-        ],
+            const SizedBox(height: 20),
+
+            _ActionButtons(
+              onFeed: _toggleFeed,
+              onDiaper: _twoTapDiaper,
+              onSleep: _toggleSleep,
+              onMedicine: _openMedicineForm,
+              isFeedActive: _activeFeeding != null,
+              isSleepActive: _activeSleep != null,
+            ),
+            const SizedBox(height: 20),
+
+            if (_lowStockItems.isNotEmpty)
+              _LowStockAlert(items: _lowStockItems),
+            if (_lowStockItems.isNotEmpty) const SizedBox(height: 16),
+
+            if (dueToday.isNotEmpty) ...[
+              _RemindersSection(
+                reminders: dueToday,
+                onEdit: _openReminderEditor,
+                onDelete: _deleteReminder,
+              ),
+              const SizedBox(height: 16),
+            ],
+
+            _AppointmentsSection(
+              appointments: upcomingAppointments,
+              selectedDate: _selectedDate,
+              focusedMonth: _focusedMonth,
+              reminders: _reminders,
+              onMonthChanged:
+                  (month) => setState(
+                    () => _focusedMonth = DateTime(month.year, month.month),
+                  ),
+              onDateSelected:
+                  (day) => setState(() {
+                    _selectedDate = DateTime(day.year, day.month, day.day);
+                    _focusedMonth = DateTime(day.year, day.month);
+                  }),
+              onAddReminder: () => _openReminderEditor(date: _selectedDate),
+              onEditReminder:
+                  (reminder) => _openReminderEditor(
+                    date: reminder.dateTime,
+                    reminder: reminder,
+                  ),
+              onDeleteReminder: _deleteReminder,
+            ),
+            const SizedBox(height: 24),
+
+            _TimelineSection(
+              events: _todayEvents,
+              isLoading: _isLoading,
+              onEdit: _openEditEventSheet,
+              onDelete: _deleteEvent,
+              onAddFirst: _toggleFeed,
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _FigmaWelcomeHeader extends StatelessWidget {
-  const _FigmaWelcomeHeader({
-    required this.babyName,
-    required this.date,
-    required this.profile,
-  });
-
+class _Header extends StatelessWidget {
+  const _Header({required this.babyName, required this.profile});
   final String babyName;
-  final DateTime date;
   final BabyProfile profile;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
       children: [
-        Text(
-          'Hello! 👋',
-          style: TextStyle(
-            fontSize: 14,
-            color: Colors.grey.shade600,
-            fontWeight: FontWeight.w500,
+        if (profile.photoBytes != null) ...[
+          CircleAvatar(
+            radius: 28,
+            backgroundImage: MemoryImage(profile.photoBytes!),
           ),
-        ),
-        const SizedBox(height: 4),
-        Row(
-          children: [
-            if (profile.photoBytes != null) ...[
-              CircleAvatar(
-                radius: 24,
-                backgroundImage: MemoryImage(profile.photoBytes!),
-              ),
-              const SizedBox(width: 12),
-            ],
-            Expanded(
-              child: Text(
-                'How\'s $babyName today?',
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF1F2937),
+          const SizedBox(width: 12),
+        ],
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Hello, Mom! 👋',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.grey,
                 ),
               ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(20),
+              Text(
+                'How\'s $babyName today?',
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.calendar_today_rounded,
-                    size: 14,
-                    color: Colors.grey.shade600,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    DateFormat('MMM d').format(date),
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.grey.shade700,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+            ],
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Text(
+            DateFormat('MMM d').format(DateTime.now()),
+            style: const TextStyle(fontWeight: FontWeight.w500),
+          ),
         ),
       ],
     );
   }
 }
 
-class _FigmaQuickStatsGrid extends StatelessWidget {
-  const _FigmaQuickStatsGrid({
+class _StatusCards extends StatelessWidget {
+  const _StatusCards({
     required this.lastFeeding,
+    required this.lastDiaper,
+    required this.activeSleep,
+    required this.activeFeeding,
     required this.lastSleep,
     required this.getTimeAgo,
   });
-
-  final BabyEvent? lastFeeding;
-  final BabyEvent? lastSleep;
+  final BabyEvent? lastFeeding,
+      lastDiaper,
+      lastSleep,
+      activeSleep,
+      activeFeeding;
   final String Function(DateTime?) getTimeAgo;
 
   @override
@@ -460,42 +579,41 @@ class _FigmaQuickStatsGrid extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          child: _FigmaStatCard(
-            gradientColors: const [Color(0xFFFDF2F8), Color(0xFFFCE7F3)],
-            iconColor: const Color(0xFFEC4899),
-            icon: Icons.child_care_rounded,
-            label: 'Last Feed',
-            labelColor: const Color(0xFFBE185D),
+          child: _StatusCard(
+            icon: Icons.baby_changing_station,
+            label: 'Feeding',
             value:
-                lastFeeding != null
-                    ? DateFormat('h:mm a').format(lastFeeding!.timestamp)
-                    : '--:--',
-            valueColor: const Color(0xFF831843),
-            subtitle:
-                lastFeeding != null
-                    ? getTimeAgo(lastFeeding!.timestamp)
-                    : 'No feeds yet',
-            subtitleColor: const Color(0xFFDB2777),
+                activeFeeding != null
+                    ? '🍼 Active'
+                    : (lastFeeding != null
+                        ? getTimeAgo(lastFeeding!.timestamp)
+                        : '—'),
+            color: Colors.orange,
+            isActive: activeFeeding != null,
           ),
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: _FigmaStatCard(
-            gradientColors: const [Color(0xFFFAF5FF), Color(0xFFF3E8FF)],
-            iconColor: const Color(0xFFA855F7),
-            icon: Icons.bedtime_rounded,
-            label: 'Last Sleep',
-            labelColor: const Color(0xFF7E22CE),
+          child: _StatusCard(
+            icon: Icons.water_drop,
+            label: 'Diaper',
+            value: lastDiaper != null ? getTimeAgo(lastDiaper!.timestamp) : '—',
+            color: Colors.cyan,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _StatusCard(
+            icon: Icons.nightlight_round,
+            label: 'Sleep',
             value:
-                lastSleep != null
-                    ? DateFormat('h:mm a').format(lastSleep!.timestamp)
-                    : '--:--',
-            valueColor: const Color(0xFF4C1D95),
-            subtitle:
-                lastSleep != null
-                    ? getTimeAgo(lastSleep!.timestamp)
-                    : 'No sleep logged',
-            subtitleColor: const Color(0xFF9333EA),
+                activeSleep != null
+                    ? '💤 Active'
+                    : (lastSleep != null
+                        ? getTimeAgo(lastSleep!.timestamp)
+                        : '—'),
+            color: Colors.purple,
+            isActive: activeSleep != null,
           ),
         ),
       ],
@@ -503,89 +621,43 @@ class _FigmaQuickStatsGrid extends StatelessWidget {
   }
 }
 
-class _FigmaStatCard extends StatelessWidget {
-  const _FigmaStatCard({
-    required this.gradientColors,
-    required this.iconColor,
+class _StatusCard extends StatelessWidget {
+  const _StatusCard({
     required this.icon,
     required this.label,
-    required this.labelColor,
     required this.value,
-    required this.valueColor,
-    required this.subtitle,
-    required this.subtitleColor,
+    required this.color,
+    this.isActive = false,
   });
-
-  final List<Color> gradientColors;
-  final Color iconColor;
   final IconData icon;
-  final String label;
-  final Color labelColor;
-  final String value;
-  final Color valueColor;
-  final String subtitle;
-  final Color subtitleColor;
+  final String label, value;
+  final Color color;
+  final bool isActive;
 
   @override
   Widget build(BuildContext context) {
     return Container(
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: gradientColors,
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        color: isActive ? color.withOpacity(0.15) : Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: isActive ? color : Colors.grey.shade200),
       ),
-      padding: const EdgeInsets.all(16),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: iconColor,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, color: Colors.white, size: 22),
-              ),
-              const SizedBox(width: 10),
-              Text(
-                label,
-                style: TextStyle(
-                  color: labelColor,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
+          Icon(icon, color: isActive ? color : Colors.grey.shade600, size: 28),
+          const SizedBox(height: 6),
           Text(
-            value,
-            style: TextStyle(
-              color: valueColor,
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-            ),
+            label,
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
           ),
           const SizedBox(height: 4),
           Text(
-            subtitle,
+            value,
             style: TextStyle(
-              color: subtitleColor,
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: isActive ? color : Colors.black87,
             ),
           ),
         ],
@@ -594,236 +666,179 @@ class _FigmaStatCard extends StatelessWidget {
   }
 }
 
-class _FigmaLowStockAlert extends StatelessWidget {
-  const _FigmaLowStockAlert({required this.items});
+class _ActionButtons extends StatelessWidget {
+  const _ActionButtons({
+    required this.onFeed,
+    required this.onDiaper,
+    required this.onSleep,
+    required this.onMedicine,
+    required this.isFeedActive,
+    required this.isSleepActive,
+  });
+  final VoidCallback onFeed, onDiaper, onSleep, onMedicine;
+  final bool isFeedActive, isSleepActive;
 
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        _ActionButton(
+          icon: Icons.baby_changing_station,
+          label: isFeedActive ? '🍼 END' : '🍼 FEED',
+          color: Colors.orange,
+          onTap: onFeed,
+        ),
+        const SizedBox(width: 12),
+        _ActionButton(
+          icon: Icons.water_drop,
+          label: '💩 DIAPER',
+          color: Colors.cyan,
+          onTap: onDiaper,
+        ),
+        const SizedBox(width: 12),
+        _ActionButton(
+          icon: Icons.nightlight_round,
+          label: isSleepActive ? '😴 END' : '😴 SLEEP',
+          color: Colors.purple,
+          onTap: onSleep,
+        ),
+        const SizedBox(width: 12),
+        _ActionButton(
+          icon: Icons.medication,
+          label: '💊 MEDS',
+          color: Colors.pink,
+          onTap: onMedicine,
+        ),
+      ],
+    );
+  }
+}
+
+class _ActionButton extends StatelessWidget {
+  const _ActionButton({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 20),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: color.withOpacity(0.3)),
+            ),
+            child: Column(
+              children: [
+                Icon(icon, color: color, size: 36),
+                const SizedBox(height: 8),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LowStockAlert extends StatelessWidget {
+  const _LowStockAlert({required this.items});
   final List<InventoryItem> items;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFFFFF7ED), Color(0xFFFFEDD5)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFFED7AA), width: 2),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.orange.withValues(alpha: 0.08),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
       padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.orange.shade200),
+      ),
+      child: Row(
         children: [
-          Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF97316),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(
-                  Icons.inventory_2_rounded,
-                  color: Colors.white,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              const Text(
-                'Low Stock Alert',
-                style: TextStyle(
-                  color: Color(0xFF7C2D12),
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          ...items
-              .take(3)
-              .map(
-                (item) => Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.03),
-                        blurRadius: 4,
-                        offset: const Offset(0, 1),
-                      ),
-                    ],
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 10,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        item.name,
-                        style: const TextStyle(
-                          color: Color(0xFF374151),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color:
-                              item.quantity <= item.lowStockThreshold ~/ 2
-                                  ? const Color(0xFFFEE2E2)
-                                  : const Color(0xFFFFEDD5),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          '${item.quantity} left',
-                          style: TextStyle(
-                            color:
-                                item.quantity <= item.lowStockThreshold ~/ 2
-                                    ? const Color(0xFF991B1B)
-                                    : const Color(0xFF9A3412),
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-          if (items.length > 3)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(
-                '+${items.length - 3} more items low',
-                style: TextStyle(
-                  color: const Color(0xFF9A3412).withValues(alpha: 0.8),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
+          const Icon(Icons.warning_amber_rounded, color: Colors.orange),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              '${items.length} low stock item${items.length > 1 ? 's' : ''}',
+              style: const TextStyle(fontWeight: FontWeight.w500),
             ),
+          ),
         ],
       ),
     );
   }
 }
 
-class _FigmaTodaysReminders extends StatelessWidget {
-  const _FigmaTodaysReminders({required this.reminders});
-
+class _RemindersSection extends StatelessWidget {
+  const _RemindersSection({
+    required this.reminders,
+    required this.onEdit,
+    required this.onDelete,
+  });
   final List<ReminderItem> reminders;
+  final Function({required DateTime date, ReminderItem? reminder}) onEdit;
+  final Function(ReminderItem) onDelete;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFFEFF6FF), Color(0xFFDBEAFE)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.blue.withValues(alpha: 0.06),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
       padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(20),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF3B82F6),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(
-                  Icons.notifications_active_rounded,
-                  color: Colors.white,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              const Text(
-                'Today\'s Reminders',
-                style: TextStyle(
-                  color: Color(0xFF1E3A8A),
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
+          const Text(
+            '🔔 Today\'s Reminders',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
           ),
           const SizedBox(height: 12),
           ...reminders.map(
-            (reminder) => Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
+            (r) => ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: CircleAvatar(
+                radius: 16,
+                child: Icon(r.type.icon, size: 16),
               ),
-              child: Row(
+              title: Text(
+                r.title,
+                style: const TextStyle(fontWeight: FontWeight.w500),
+              ),
+              subtitle: Text(DateFormat('h:mm a').format(r.dateTime)),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color:
-                          reminder.type == ReminderType.vaccine
-                              ? const Color(0xFF10B981)
-                              : const Color(0xFF3B82F6),
-                      shape: BoxShape.circle,
-                    ),
+                  IconButton(
+                    icon: const Icon(Icons.edit, size: 18),
+                    onPressed: () => onEdit(date: r.dateTime, reminder: r),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          reminder.title,
-                          style: const TextStyle(
-                            color: Color(0xFF1F2937),
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          DateFormat('h:mm a').format(reminder.dateTime),
-                          style: TextStyle(
-                            color: Colors.grey.shade600,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
+                  IconButton(
+                    icon: const Icon(Icons.delete, size: 18),
+                    onPressed: () => onDelete(r),
                   ),
                 ],
               ),
@@ -835,120 +850,8 @@ class _FigmaTodaysReminders extends StatelessWidget {
   }
 }
 
-class _FigmaQuickActionsGrid extends StatelessWidget {
-  const _FigmaQuickActionsGrid({required this.onActionTap});
-
-  final void Function(EventType) onActionTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final actions = [
-      _QuickAction(
-        type: EventType.feeding,
-        icon: Icons.baby_changing_station_rounded,
-        label: 'Feeding',
-        color: const Color(0xFFF59E0B),
-        bgColor: const Color(0xFFFEF3C7),
-      ),
-      _QuickAction(
-        type: EventType.diaper,
-        icon: Icons.water_drop_rounded,
-        label: 'Diaper',
-        color: const Color(0xFF06B6D4),
-        bgColor: const Color(0xFFCFFAFE),
-      ),
-      _QuickAction(
-        type: EventType.sleep,
-        icon: Icons.nightlight_round_rounded,
-        label: 'Sleep',
-        color: const Color(0xFF8B5CF6),
-        bgColor: const Color(0xFFEDE9FE),
-      ),
-      _QuickAction(
-        type: EventType.medicine,
-        icon: Icons.medication_liquid_rounded,
-        label: 'Medicine',
-        color: const Color(0xFFEC4899),
-        bgColor: const Color(0xFFFCE7F3),
-      ),
-    ];
-
-    return GridView.count(
-      crossAxisCount: 4,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 10,
-      crossAxisSpacing: 10,
-      childAspectRatio: 0.85,
-      children:
-          actions.map((action) {
-            return Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: () => onActionTap(action.type),
-                borderRadius: BorderRadius.circular(20),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.grey.shade200, width: 1.5),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.03),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: action.bgColor,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Icon(action.icon, color: action.color, size: 26),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        action.label,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF374151),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          }).toList(),
-    );
-  }
-}
-
-class _QuickAction {
-  final EventType type;
-  final IconData icon;
-  final String label;
-  final Color color;
-  final Color bgColor;
-
-  _QuickAction({
-    required this.type,
-    required this.icon,
-    required this.label,
-    required this.color,
-    required this.bgColor,
-  });
-}
-
-class _FigmaUpcomingAppointments extends StatelessWidget {
-  const _FigmaUpcomingAppointments({
+class _AppointmentsSection extends StatelessWidget {
+  const _AppointmentsSection({
     required this.appointments,
     required this.selectedDate,
     required this.focusedMonth,
@@ -956,500 +859,492 @@ class _FigmaUpcomingAppointments extends StatelessWidget {
     required this.onMonthChanged,
     required this.onDateSelected,
     required this.onAddReminder,
+    required this.onEditReminder,
+    required this.onDeleteReminder,
   });
-
   final List<_ScheduledReminder> appointments;
-  final DateTime selectedDate;
-  final DateTime focusedMonth;
+  final DateTime selectedDate, focusedMonth;
   final List<ReminderItem> reminders;
-  final ValueChanged<DateTime> onMonthChanged;
-  final ValueChanged<DateTime> onDateSelected;
+  final ValueChanged<DateTime> onMonthChanged, onDateSelected;
   final VoidCallback onAddReminder;
+  final ValueChanged<ReminderItem> onEditReminder, onDeleteReminder;
 
   @override
   Widget build(BuildContext context) {
     final monthLabel = DateFormat('MMMM yyyy').format(focusedMonth);
-    final selectedDateLabel = DateFormat(
-      'EEE, MMM d, yyyy',
-    ).format(selectedDate);
+    final weekdays = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
+    final firstDayOfMonth = DateTime(focusedMonth.year, focusedMonth.month, 1);
+    final firstWeekday = firstDayOfMonth.weekday - 1;
+    final daysInMonth =
+        DateTime(focusedMonth.year, focusedMonth.month + 1, 0).day;
+    final daysBefore = firstWeekday;
+    final totalDays = daysBefore + daysInMonth;
+    final rows = (totalDays / 7).ceil();
 
     return Container(
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFFEEF2FF), Color(0xFFE0E7FF)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.indigo.withValues(alpha: 0.06),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
       padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.indigo.shade50,
+        borderRadius: BorderRadius.circular(20),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF6366F1),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(
-                  Icons.calendar_month_rounded,
-                  color: Colors.white,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Text(
-                  'Upcoming Appointments',
-                  style: TextStyle(
-                    color: Color(0xFF312E81),
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              IconButton(
-                onPressed: onAddReminder,
-                icon: Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(
-                    Icons.add_rounded,
-                    size: 18,
-                    color: Color(0xFF6366F1),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              IconButton(
-                onPressed:
-                    () => onMonthChanged(
-                      DateTime(focusedMonth.year, focusedMonth.month - 1),
-                    ),
-                icon: const Icon(Icons.chevron_left_rounded, size: 20),
+              const Text(
+                '📅 Appointments',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               ),
-              Text(
-                monthLabel,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF4338CA),
-                ),
-              ),
-              IconButton(
-                onPressed:
-                    () => onMonthChanged(
-                      DateTime(focusedMonth.year, focusedMonth.month + 1),
+              Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.chevron_left),
+                    onPressed:
+                        () => onMonthChanged(
+                          DateTime(focusedMonth.year, focusedMonth.month - 1),
+                        ),
+                    constraints: const BoxConstraints(
+                      minWidth: 32,
+                      minHeight: 32,
                     ),
-                icon: const Icon(Icons.chevron_right_rounded, size: 20),
+                    padding: EdgeInsets.zero,
+                  ),
+                  Text(
+                    monthLabel,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.chevron_right),
+                    onPressed:
+                        () => onMonthChanged(
+                          DateTime(focusedMonth.year, focusedMonth.month + 1),
+                        ),
+                    constraints: const BoxConstraints(
+                      minWidth: 32,
+                      minHeight: 32,
+                    ),
+                    padding: EdgeInsets.zero,
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(Icons.add),
+                    onPressed: onAddReminder,
+                    constraints: const BoxConstraints(
+                      minWidth: 32,
+                      minHeight: 32,
+                    ),
+                    padding: EdgeInsets.zero,
+                  ),
+                ],
               ),
             ],
           ),
           const SizedBox(height: 12),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.72),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Text(
-              'Selected: $selectedDateLabel',
-              style: const TextStyle(
-                color: Color(0xFF4338CA),
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
+
+          Column(
+            children: [
+              Row(
+                children:
+                    weekdays
+                        .map(
+                          (day) => Expanded(
+                            child: Center(
+                              child: Text(
+                                day,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                            ),
+                          ),
+                        )
+                        .toList(),
               ),
-            ),
+              const SizedBox(height: 8),
+
+              for (int row = 0; row < rows; row++) ...[
+                Row(
+                  children: List.generate(7, (col) {
+                    final dayIndex = row * 7 + col;
+                    final dayNumber = dayIndex - daysBefore + 1;
+                    final isCurrentMonth =
+                        dayNumber >= 1 && dayNumber <= daysInMonth;
+                    final date = DateTime(
+                      focusedMonth.year,
+                      focusedMonth.month,
+                      dayNumber,
+                    );
+                    final isSelected =
+                        isCurrentMonth &&
+                        DateUtils.isSameDay(date, selectedDate);
+                    final isToday =
+                        isCurrentMonth &&
+                        DateUtils.isSameDay(date, DateTime.now());
+                    final hasReminder =
+                        isCurrentMonth &&
+                        reminders.any((r) => r.occursOnDay(date));
+
+                    return Expanded(
+                      child: InkWell(
+                        onTap:
+                            isCurrentMonth ? () => onDateSelected(date) : null,
+                        borderRadius: BorderRadius.circular(20),
+                        child: Container(
+                          margin: const EdgeInsets.all(2),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          decoration: BoxDecoration(
+                            color:
+                                isSelected
+                                    ? Colors.indigo
+                                    : (isToday
+                                        ? Colors.indigo.shade100
+                                        : Colors.transparent),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              Text(
+                                isCurrentMonth ? dayNumber.toString() : '',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight:
+                                      isSelected
+                                          ? FontWeight.bold
+                                          : FontWeight.normal,
+                                  color:
+                                      isSelected
+                                          ? Colors.white
+                                          : (isToday
+                                              ? Colors.indigo
+                                              : Colors.black87),
+                                ),
+                              ),
+                              if (hasReminder && !isSelected)
+                                Positioned(
+                                  bottom: 2,
+                                  child: Container(
+                                    width: 4,
+                                    height: 4,
+                                    decoration: const BoxDecoration(
+                                      color: Colors.indigo,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+                if (row < rows - 1) const SizedBox(height: 4),
+              ],
+            ],
           ),
-          const SizedBox(height: 10),
-          _MiniCalendar(
-            focusedMonth: focusedMonth,
-            selectedDate: selectedDate,
-            reminders: reminders,
-            onDateSelected: onDateSelected,
-          ),
+
+          const SizedBox(height: 16),
+          Divider(color: Colors.grey.shade300),
           const SizedBox(height: 12),
+
           if (appointments.isEmpty)
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Center(
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Center(
                 child: Text(
                   'No upcoming appointments',
-                  style: TextStyle(color: Color(0xFF6B7280), fontSize: 13),
+                  style: TextStyle(color: Colors.grey),
                 ),
               ),
             )
           else
             ...appointments
-                .take(2)
+                .take(3)
                 .map(
-                  (apt) => Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
+                  (apt) => ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: CircleAvatar(
+                      backgroundColor: Colors.indigo.shade100,
+                      child: Icon(
+                        apt.reminder.type.icon,
+                        size: 20,
+                        color: Colors.indigo,
+                      ),
                     ),
-                    child: Row(
+                    title: Text(
+                      apt.reminder.title,
+                      style: const TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                    subtitle: Text(
+                      '${DateFormat('MMM d').format(apt.occurrence)} • ${DateFormat('h:mm a').format(apt.occurrence)}',
+                    ),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFE0E7FF),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Icon(
-                            apt.reminder.type.icon,
-                            color: const Color(0xFF4F46E5),
-                            size: 20,
-                          ),
+                        IconButton(
+                          icon: const Icon(Icons.edit, size: 18),
+                          onPressed: () => onEditReminder(apt.reminder),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      apt.reminder.title,
-                                      style: const TextStyle(
-                                        color: Color(0xFF1F2937),
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 3,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFE0E7FF),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Text(
-                                      DateFormat(
-                                        'MMM d',
-                                      ).format(apt.occurrence),
-                                      style: const TextStyle(
-                                        color: Color(0xFF4338CA),
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                DateFormat('h:mm a').format(apt.occurrence),
-                                style: TextStyle(
-                                  color: Colors.grey.shade600,
-                                  fontSize: 12,
-                                ),
-                              ),
-                              if (apt.reminder.notes.isNotEmpty) ...[
-                                const SizedBox(height: 4),
-                                Text(
-                                  apt.reminder.notes,
-                                  style: TextStyle(
-                                    color: Colors.grey.shade500,
-                                    fontSize: 11,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ],
-                            ],
-                          ),
+                        IconButton(
+                          icon: const Icon(Icons.delete, size: 18),
+                          onPressed: () => onDeleteReminder(apt.reminder),
                         ),
                       ],
                     ),
                   ),
                 ),
+
+          if (appointments.length > 3)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                '+${appointments.length - 3} more',
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+              ),
+            ),
         ],
       ),
     );
   }
 }
 
-class _MiniCalendar extends StatelessWidget {
-  const _MiniCalendar({
-    required this.focusedMonth,
-    required this.selectedDate,
-    required this.reminders,
-    required this.onDateSelected,
+class _TimelineSection extends StatelessWidget {
+  const _TimelineSection({
+    required this.events,
+    required this.isLoading,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onAddFirst,
   });
-
-  final DateTime focusedMonth;
-  final DateTime selectedDate;
-  final List<ReminderItem> reminders;
-  final ValueChanged<DateTime> onDateSelected;
+  final List<BabyEvent> events;
+  final bool isLoading;
+  final Function(BabyEvent) onEdit, onDelete;
+  final VoidCallback onAddFirst;
 
   @override
   Widget build(BuildContext context) {
-    final firstDayOfMonth = DateTime(focusedMonth.year, focusedMonth.month);
-    final leadingOffset = firstDayOfMonth.weekday % 7;
-    final gridStart = firstDayOfMonth.subtract(Duration(days: leadingOffset));
-    final days = List.generate(
-      42,
-      (index) =>
-          DateTime(gridStart.year, gridStart.month, gridStart.day + index),
-    );
-
-    final weekdays = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
-          children:
-              weekdays.map((day) {
-                return Expanded(
-                  child: Center(
-                    child: Text(
-                      day,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey.shade500,
-                      ),
-                    ),
-                  ),
-                );
-              }).toList(),
-        ),
-        const SizedBox(height: 6),
-        GridView.builder(
-          itemCount: 42,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 7,
-            crossAxisSpacing: 2,
-            mainAxisSpacing: 2,
-            childAspectRatio: 1,
-          ),
-          itemBuilder: (context, index) {
-            final day = days[index];
-            final isCurrentMonth = day.month == focusedMonth.month;
-            final isSelected = DateUtils.isSameDay(day, selectedDate);
-            final isToday = DateUtils.isSameDay(day, DateTime.now());
-            final hasReminder = reminders.any((r) => r.occursOnDay(day));
-
-            return Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: () => onDateSelected(day),
-                borderRadius: BorderRadius.circular(20),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color:
-                        isSelected
-                            ? const Color(0xFF6366F1)
-                            : isToday
-                            ? const Color(0xFFE0E7FF)
-                            : Colors.transparent,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      Text(
-                        '${day.day}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight:
-                              isSelected || isToday
-                                  ? FontWeight.bold
-                                  : FontWeight.w500,
-                          color:
-                              isSelected
-                                  ? Colors.white
-                                  : isCurrentMonth
-                                  ? const Color(0xFF1F2937)
-                                  : Colors.grey.shade400,
-                        ),
-                      ),
-                      if (hasReminder && !isSelected)
-                        Positioned(
-                          bottom: 2,
-                          child: Container(
-                            width: 4,
-                            height: 4,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFF6366F1),
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Today\'s Timeline',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            if (events.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade200,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '${events.length} events',
+                  style: const TextStyle(fontSize: 12),
                 ),
               ),
-            );
-          },
+          ],
         ),
+        const SizedBox(height: 12),
+        if (isLoading)
+          const Center(
+            child: Padding(
+              padding: EdgeInsets.all(32),
+              child: CircularProgressIndicator(),
+            ),
+          )
+        else if (events.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(32),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Column(
+              children: [
+                const Icon(Icons.hourglass_empty, size: 48, color: Colors.grey),
+                const SizedBox(height: 12),
+                const Text(
+                  'No events yet today',
+                  style: TextStyle(fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton(
+                  onPressed: onAddFirst,
+                  child: const Text('Log First Event'),
+                ),
+              ],
+            ),
+          )
+        else
+          ...events.map(
+            (event) => EventTimelineItem(
+              event: event,
+              onTap: () => onEdit(event),
+              onDelete: () => onDelete(event),
+            ),
+          ),
       ],
     );
   }
 }
 
-class _FigmaEmptyTimeline extends StatelessWidget {
-  const _FigmaEmptyTimeline({required this.onAddEvent});
+class _MedicineFormSheet extends StatefulWidget {
+  const _MedicineFormSheet();
 
-  final VoidCallback onAddEvent;
+  @override
+  State<_MedicineFormSheet> createState() => _MedicineFormSheetState();
+}
+
+class _MedicineFormSheetState extends State<_MedicineFormSheet> {
+  final _formKey = GlobalKey<FormState>();
+  late TextEditingController _doseController;
+  late TextEditingController _unitController;
+  late TextEditingController _notesController;
+
+  @override
+  void initState() {
+    super.initState();
+    _doseController = TextEditingController();
+    _unitController = TextEditingController();
+    _notesController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _doseController.dispose();
+    _unitController.dispose();
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _saveMedicine() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    final event = BabyEvent(
+      type: EventType.medicine,
+      timestamp: DateTime.now(),
+      medicineDose: _doseController.text.trim(),
+      medicineUnit: _unitController.text.trim(),
+      notes:
+          _notesController.text.trim().isEmpty
+              ? null
+              : _notesController.text.trim(),
+    );
+
+    await DatabaseHelper.instance.insertEvent(event);
+    if (!mounted) return;
+    Navigator.of(context).pop(true);
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(32),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.grey.shade200),
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        20,
+        20,
+        MediaQuery.of(context).viewInsets.bottom + 20,
       ),
-      child: Column(
-        children: [
-          Container(
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(
-              color: Colors.grey.shade100,
-              borderRadius: BorderRadius.circular(20),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '💊 Log Medicine',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
-            child: Icon(
-              Icons.hourglass_empty_rounded,
-              size: 32,
-              color: Colors.grey.shade400,
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: TextFormField(
+                    controller: _doseController,
+                    decoration: const InputDecoration(
+                      labelText: 'Dose',
+                      border: OutlineInputBorder(),
+                      hintText: 'e.g., 2.5',
+                    ),
+                    keyboardType: TextInputType.number,
+                    validator:
+                        (v) => v?.trim().isEmpty == true ? 'Required' : null,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 3,
+                  child: TextFormField(
+                    controller: _unitController,
+                    decoration: const InputDecoration(
+                      labelText: 'Unit',
+                      border: OutlineInputBorder(),
+                      hintText: 'ml, tablet, drop',
+                    ),
+                    validator:
+                        (v) => v?.trim().isEmpty == true ? 'Required' : null,
+                  ),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            'No events logged yet today',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF374151),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _notesController,
+              decoration: const InputDecoration(
+                labelText: 'Notes (optional)',
+                border: OutlineInputBorder(),
+                hintText: 'e.g., After meal, with water',
+              ),
+              maxLines: 2,
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Use the quick actions above to log care events',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
-          ),
-          const SizedBox(height: 16),
-          OutlinedButton(
-            onPressed: onAddEvent,
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: _saveMedicine,
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                child: const Text(
+                  'Save Medicine Log',
+                  style: TextStyle(fontSize: 16),
+                ),
               ),
             ),
-            child: const Text('Log first event'),
-          ),
-        ],
+          ],
+        ),
       ),
     );
-  }
-}
-
-class _HomeInsights {
-  const _HomeInsights({
-    required this.lastFeeding,
-    required this.lastSleep,
-    required this.lowStockCount,
-    required this.activeReminderCount,
-  });
-
-  final BabyEvent? lastFeeding;
-  final BabyEvent? lastSleep;
-  final int lowStockCount;
-  final int activeReminderCount;
-
-  factory _HomeInsights.empty() {
-    return const _HomeInsights(
-      lastFeeding: null,
-      lastSleep: null,
-      lowStockCount: 0,
-      activeReminderCount: 0,
-    );
-  }
-
-  _HomeInsights copyWith({
-    BabyEvent? lastFeeding,
-    BabyEvent? lastSleep,
-    int? lowStockCount,
-    int? activeReminderCount,
-  }) {
-    return _HomeInsights(
-      lastFeeding: lastFeeding ?? this.lastFeeding,
-      lastSleep: lastSleep ?? this.lastSleep,
-      lowStockCount: lowStockCount ?? this.lowStockCount,
-      activeReminderCount: activeReminderCount ?? this.activeReminderCount,
-    );
-  }
-
-  String get lastFeedingLabel {
-    if (lastFeeding == null) return 'No feeds yet';
-    return DateFormat('h:mm a').format(lastFeeding!.timestamp);
-  }
-
-  String get lastSleepLabel {
-    if (lastSleep == null) return 'No sleep logged';
-    return DateFormat('h:mm a').format(lastSleep!.timestamp);
   }
 }
 
 class _ScheduledReminder {
   const _ScheduledReminder({required this.reminder, required this.occurrence});
-
   final ReminderItem reminder;
   final DateTime occurrence;
 }
 
 class _ReminderEditorResult {
   const _ReminderEditorResult({this.reminder, this.deleted = false});
-
   final ReminderItem? reminder;
   final bool deleted;
 }
 
 class _ReminderEditorSheet extends StatefulWidget {
   const _ReminderEditorSheet({required this.initialDate, this.reminder});
-
   final DateTime initialDate;
   final ReminderItem? reminder;
 
@@ -1459,8 +1354,7 @@ class _ReminderEditorSheet extends StatefulWidget {
 
 class _ReminderEditorSheetState extends State<_ReminderEditorSheet> {
   final _formKey = GlobalKey<FormState>();
-  late final TextEditingController _titleController;
-  late final TextEditingController _notesController;
+  late final TextEditingController _titleController, _notesController;
   late ReminderType _type;
   late ReminderRepeat _repeat;
   late DateTime _selectedDate;
@@ -1497,11 +1391,7 @@ class _ReminderEditorSheetState extends State<_ReminderEditorSheet> {
       firstDate: DateTime(2020),
       lastDate: DateTime(2100),
     );
-    if (picked != null) {
-      setState(() {
-        _selectedDate = picked;
-      });
-    }
+    if (picked != null) setState(() => _selectedDate = picked);
   }
 
   Future<void> _pickTime() async {
@@ -1509,18 +1399,11 @@ class _ReminderEditorSheetState extends State<_ReminderEditorSheet> {
       context: context,
       initialTime: _selectedTime,
     );
-    if (picked != null) {
-      setState(() {
-        _selectedTime = picked;
-      });
-    }
+    if (picked != null) setState(() => _selectedTime = picked);
   }
 
   void _save() {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
-
+    if (!_formKey.currentState!.validate()) return;
     final dateTime = DateTime(
       _selectedDate.year,
       _selectedDate.month,
@@ -1528,7 +1411,6 @@ class _ReminderEditorSheetState extends State<_ReminderEditorSheet> {
       _selectedTime.hour,
       _selectedTime.minute,
     );
-
     Navigator.of(context).pop(
       _ReminderEditorResult(
         reminder: ReminderItem(
@@ -1546,9 +1428,7 @@ class _ReminderEditorSheetState extends State<_ReminderEditorSheet> {
   }
 
   void _delete() {
-    setState(() {
-      _isDeleting = true;
-    });
+    setState(() => _isDeleting = true);
     Navigator.of(context).pop(const _ReminderEditorResult(deleted: true));
   }
 
@@ -1572,12 +1452,11 @@ class _ReminderEditorSheetState extends State<_ReminderEditorSheet> {
                   fontWeight: FontWeight.w800,
                 ),
               ),
-              const SizedBox(height: 8),
-              const SizedBox(height: 10),
+              const SizedBox(height: 16),
               DropdownButtonFormField<ReminderType>(
                 value: _type,
                 decoration: const InputDecoration(
-                  labelText: 'Reminder type',
+                  labelText: 'Type',
                   border: OutlineInputBorder(),
                 ),
                 items:
@@ -1587,7 +1466,7 @@ class _ReminderEditorSheetState extends State<_ReminderEditorSheet> {
                             value: type,
                             child: Row(
                               children: [
-                                Icon(type.icon, size: 18),
+                                Icon(type.icon),
                                 const SizedBox(width: 8),
                                 Text(type.label),
                               ],
@@ -1595,41 +1474,26 @@ class _ReminderEditorSheetState extends State<_ReminderEditorSheet> {
                           ),
                         )
                         .toList(),
-                onChanged: (value) {
-                  if (value != null) {
-                    setState(() {
-                      _type = value;
-                    });
-                  }
-                },
+                onChanged: (value) => setState(() => _type = value!),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
               TextFormField(
                 controller: _titleController,
                 decoration: const InputDecoration(
                   labelText: 'Title',
-                  hintText: 'Example: 6-month vaccine visit',
                   border: OutlineInputBorder(),
                 ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Enter a title';
-                  }
-                  return null;
-                },
+                validator: (v) => v?.trim().isEmpty == true ? 'Required' : null,
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
               Row(
                 children: [
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: _pickDate,
-                      icon: const Icon(Icons.calendar_today_rounded),
+                      icon: const Icon(Icons.calendar_today),
                       label: Text(
                         DateFormat('MMM d, yyyy').format(_selectedDate),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
                     ),
                   ),
@@ -1637,16 +1501,13 @@ class _ReminderEditorSheetState extends State<_ReminderEditorSheet> {
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: _pickTime,
-                      icon: const Icon(Icons.schedule_rounded),
+                      icon: const Icon(Icons.schedule),
                       label: Text(_selectedTime.format(context)),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
               DropdownButtonFormField<ReminderRepeat>(
                 value: _repeat,
                 decoration: const InputDecoration(
@@ -1662,64 +1523,36 @@ class _ReminderEditorSheetState extends State<_ReminderEditorSheet> {
                           ),
                         )
                         .toList(),
-                onChanged: (value) {
-                  if (value != null) {
-                    setState(() {
-                      _repeat = value;
-                    });
-                  }
-                },
+                onChanged: (value) => setState(() => _repeat = value!),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
               TextFormField(
                 controller: _notesController,
-                minLines: 3,
-                maxLines: 5,
+                minLines: 2,
+                maxLines: 4,
                 decoration: const InputDecoration(
                   labelText: 'Notes',
-                  hintText:
-                      'Doctor name, clinic, vaccine brand, or follow-up details',
                   border: OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 24),
-              if (isEditing) ...[
+              if (isEditing)
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(
                     onPressed: _isDeleting ? null : _delete,
-                    icon:
-                        _isDeleting
-                            ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                            : const Icon(Icons.delete_outline_rounded),
-                    label: Text(
-                      _isDeleting ? 'Deleting...' : 'Delete reminder',
-                    ),
+                    icon: const Icon(Icons.delete),
+                    label: const Text('Delete reminder'),
                   ),
                 ),
-                const SizedBox(height: 12),
-              ],
+              const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
                 child: FilledButton(
                   onPressed: _save,
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                  child: Text(
-                    isEditing ? 'Save changes' : 'Create reminder',
-                    style: const TextStyle(fontSize: 16),
-                  ),
+                  child: Text(isEditing ? 'Save' : 'Create'),
                 ),
               ),
-              const SizedBox(height: 8),
             ],
           ),
         ),

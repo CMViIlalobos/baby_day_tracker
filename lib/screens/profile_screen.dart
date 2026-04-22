@@ -530,6 +530,73 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ],
         ),
+        const SizedBox(height: 16),
+        AppAccordionSection(
+          title: 'How to Use',
+          subtitle: 'Quick guide',
+          leading: Icon(Icons.menu_book_rounded, color: scheme.primary),
+          children: const [
+            _TutorialBlock(
+              title: '1. Set Up',
+              steps: [
+                'Open the Baby tab.',
+                'Add your baby name, birth date, theme, and photo.',
+                'Save your profile.',
+              ],
+            ),
+            SizedBox(height: 16),
+            _TutorialBlock(
+              title: '2. Log Daily Care',
+              steps: [
+                'Go to Home and use the quick action buttons.',
+                'For Feeding and Sleep, set start and end times.',
+                'The app computes the duration automatically.',
+                'Add notes if needed, then save.',
+              ],
+            ),
+            SizedBox(height: 16),
+            _TutorialBlock(
+              title: '3. Fix Mistakes',
+              steps: [
+                'Tap an event in the Home timeline to edit it.',
+                'Use the delete button if the entry was incorrect.',
+              ],
+            ),
+            SizedBox(height: 16),
+            _TutorialBlock(
+              title: '4. Manage Appointments',
+              steps: [
+                'Use the Appointments section on Home to add reminders.',
+                'Set title, date, time, repeat, and notes.',
+                'Use the edit or delete icons on reminder cards if plans change.',
+              ],
+            ),
+            SizedBox(height: 16),
+            _TutorialBlock(
+              title: '5. Track Growth',
+              steps: [
+                'Open Growth to log measurements and milestones.',
+                'Use the visible delete buttons on cards when needed.',
+              ],
+            ),
+            SizedBox(height: 16),
+            _TutorialBlock(
+              title: '6. Manage Inventory',
+              steps: [
+                'Open Inventory to add supplies and adjust stock.',
+                'Edit or delete items from the inventory cards or editor.',
+              ],
+            ),
+            SizedBox(height: 16),
+            _TutorialBlock(
+              title: '7. Review and Export',
+              steps: [
+                'Open Statistics to review trends and averages.',
+                'Open Export to share PDF or CSV data.',
+              ],
+            ),
+          ],
+        ),
         const SizedBox(height: 20),
         FilledButton.icon(
           onPressed: _isSaving ? null : _saveProfile,
@@ -552,5 +619,64 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final hour = int.tryParse(parts.first) ?? 0;
     final minute = int.tryParse(parts.last) ?? 0;
     return DateFormat.jm().format(DateTime(2000, 1, 1, hour, minute));
+  }
+}
+
+class _TutorialBlock extends StatelessWidget {
+  const _TutorialBlock({required this.title, required this.steps});
+
+  final String title;
+  final List<String> steps;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 10),
+          for (final step in steps) ...[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: scheme.primary,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    step,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+              ],
+            ),
+            if (step != steps.last) const SizedBox(height: 8),
+          ],
+        ],
+      ),
+    );
   }
 }
