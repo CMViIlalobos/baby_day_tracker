@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../database/database_helper.dart';
 import '../models/baby_profile.dart';
+import '../widgets/home_style.dart';
 
 class DevelopmentScreen extends StatefulWidget {
   const DevelopmentScreen({
@@ -155,12 +156,11 @@ class _DevelopmentScreenState extends State<DevelopmentScreen> {
           else ...[
             _SectionTitle(
               title: 'Current Snapshot',
-              subtitle: 'Quick view of your baby’s latest logged progress.',
+              subtitle: 'Latest progress',
             ),
             const SizedBox(height: 12),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
+            HomeStyleResponsiveGrid(
+              mainAxisExtent: 176,
               children: [
                 _SnapshotCard(
                   title: 'Weight',
@@ -170,8 +170,8 @@ class _DevelopmentScreenState extends State<DevelopmentScreen> {
                           : '${latestGrowth!.weightKg!.toStringAsFixed(2)} kg',
                   subtitle:
                       weightDelta == null
-                          ? 'Add two entries for a trend'
-                          : '${weightDelta >= 0 ? '+' : ''}${weightDelta.toStringAsFixed(2)} kg from last check',
+                          ? 'Need 2 entries'
+                          : '${weightDelta >= 0 ? '+' : ''}${weightDelta.toStringAsFixed(2)} kg',
                   icon: Icons.monitor_weight_rounded,
                   tint: const Color(0xFFFFD4D4),
                 ),
@@ -183,8 +183,8 @@ class _DevelopmentScreenState extends State<DevelopmentScreen> {
                           : '${latestGrowth!.heightCm!.toStringAsFixed(1)} cm',
                   subtitle:
                       heightDelta == null
-                          ? 'Track growth over time'
-                          : '${heightDelta >= 0 ? '+' : ''}${heightDelta.toStringAsFixed(1)} cm from last check',
+                          ? 'Need 2 entries'
+                          : '${heightDelta >= 0 ? '+' : ''}${heightDelta.toStringAsFixed(1)} cm',
                   icon: Icons.height_rounded,
                   tint: const Color(0xFFD9ECFF),
                 ),
@@ -196,7 +196,7 @@ class _DevelopmentScreenState extends State<DevelopmentScreen> {
                           : '${latestGrowth!.headCircumferenceCm!.toStringAsFixed(1)} cm',
                   subtitle:
                       latestGrowth == null
-                          ? 'No recent entry'
+                          ? 'No entry'
                           : 'Updated ${DateFormat('MMM d').format(latestGrowth.recordedAt)}',
                   icon: Icons.circle_outlined,
                   tint: const Color(0xFFDDF5E8),
@@ -209,7 +209,7 @@ class _DevelopmentScreenState extends State<DevelopmentScreen> {
                           : _milestones.first.title,
                   subtitle:
                       _milestones.isEmpty
-                          ? 'Record smiles, rolling, and firsts'
+                          ? 'No milestone'
                           : _milestones.first.category,
                   icon: Icons.emoji_events_rounded,
                   tint: const Color(0xFFFDE7C8),
@@ -219,7 +219,7 @@ class _DevelopmentScreenState extends State<DevelopmentScreen> {
             const SizedBox(height: 22),
             _SectionTitle(
               title: 'Growth Timeline',
-              subtitle: 'Swipe to delete. The latest check stays at the top.',
+              subtitle: 'Latest first',
               actionLabel: _growthEntries.isEmpty ? null : 'Log new',
               onAction: _growthEntries.isEmpty ? null : _openGrowthEditor,
             ),
@@ -228,8 +228,7 @@ class _DevelopmentScreenState extends State<DevelopmentScreen> {
               const _IllustratedEmptyState(
                 icon: Icons.straighten_rounded,
                 title: 'No growth check-ins yet',
-                description:
-                    'Start with weight, height, or head circumference after checkups or home measurements.',
+                description: 'Add a first measurement.',
               )
             else
               ..._growthEntries.asMap().entries.map(
@@ -242,7 +241,7 @@ class _DevelopmentScreenState extends State<DevelopmentScreen> {
             const SizedBox(height: 22),
             _SectionTitle(
               title: 'Milestone Moments',
-              subtitle: 'Capture developmental wins and memorable firsts.',
+              subtitle: 'Captured moments',
               actionLabel: _milestones.isEmpty ? null : 'Add new',
               onAction: _milestones.isEmpty ? null : _openMilestoneEditor,
             ),
@@ -251,13 +250,11 @@ class _DevelopmentScreenState extends State<DevelopmentScreen> {
               const _IllustratedEmptyState(
                 icon: Icons.flag_rounded,
                 title: 'No milestones yet',
-                description:
-                    'Track smiles, tummy time wins, rolling, grabbing, social reactions, and more.',
+                description: 'Add a first milestone.',
               )
             else
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
+              HomeStyleResponsiveGrid(
+                mainAxisExtent: 190,
                 children:
                     _milestones
                         .map(
@@ -357,40 +354,90 @@ class _GrowthHero extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 18),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              _HeroChip(icon: Icons.cake_rounded, label: ageLabel),
-              _HeroChip(
-                icon: Icons.straighten_rounded,
-                label: '$measurementsCount measurements',
-              ),
-              _HeroChip(
-                icon: Icons.emoji_events_rounded,
-                label: '$milestoneCount milestones',
-              ),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final wideLayout = constraints.maxWidth >= 760;
+              final chips = [
+                _HeroChip(icon: Icons.cake_rounded, label: ageLabel),
+                _HeroChip(
+                  icon: Icons.straighten_rounded,
+                  label: '$measurementsCount measurements',
+                ),
+                _HeroChip(
+                  icon: Icons.emoji_events_rounded,
+                  label: '$milestoneCount milestones',
+                ),
+              ];
+
+              if (wideLayout) {
+                return Row(
+                  children: [
+                    for (var index = 0; index < chips.length; index++) ...[
+                      Expanded(child: chips[index]),
+                      if (index != chips.length - 1) const SizedBox(width: 10),
+                    ],
+                  ],
+                );
+              }
+
+              return Column(
+                children: [
+                  for (var index = 0; index < chips.length; index++) ...[
+                    SizedBox(width: double.infinity, child: chips[index]),
+                    if (index != chips.length - 1) const SizedBox(height: 10),
+                  ],
+                ],
+              );
+            },
           ),
           const SizedBox(height: 18),
-          Row(
-            children: [
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: onLogGrowth,
-                  icon: const Icon(Icons.add_chart_rounded),
-                  label: const Text('Log Growth'),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: onAddMilestone,
-                  icon: const Icon(Icons.flag_rounded),
-                  label: const Text('Add Milestone'),
-                ),
-              ),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final wideLayout = constraints.maxWidth >= 560;
+              if (wideLayout) {
+                return Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: onLogGrowth,
+                        icon: const Icon(Icons.add_chart_rounded),
+                        label: const Text('Log Growth'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: onAddMilestone,
+                        icon: const Icon(Icons.flag_rounded),
+                        label: const Text('Add Milestone'),
+                      ),
+                    ),
+                  ],
+                );
+              }
+
+              return Column(
+                children: [
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: onLogGrowth,
+                      icon: const Icon(Icons.add_chart_rounded),
+                      label: const Text('Log Growth'),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: onAddMilestone,
+                      icon: const Icon(Icons.flag_rounded),
+                      label: const Text('Add Milestone'),
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
         ],
       ),
@@ -407,6 +454,7 @@ class _HeroChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.72),
@@ -439,31 +487,11 @@ class _SectionTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                subtitle,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-        ),
-        if (actionLabel != null && onAction != null)
-          TextButton(onPressed: onAction, child: Text(actionLabel!)),
-      ],
+    return HomeStyleSectionHeader(
+      title: title,
+      subtitle: subtitle,
+      actionLabel: actionLabel,
+      onAction: onAction,
     );
   }
 }
@@ -485,49 +513,16 @@ class _SnapshotCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final width = (MediaQuery.of(context).size.width - 52) / 2;
-    return SizedBox(
-      width: width,
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: tint,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Icon(icon),
-              ),
-              const SizedBox(height: 14),
-              Text(
-                title,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                value,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                subtitle,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    return HomeStyleInfoCard(
+      title: title,
+      value: value,
+      subtitle: subtitle,
+      icon: icon,
+      gradientColors: [tint.withValues(alpha: 0.72), Colors.white],
+      iconColor: const Color(0xFF2563EB),
+      labelColor: const Color(0xFF374151),
+      valueColor: const Color(0xFF111827),
+      subtitleColor: const Color(0xFF6B7280),
     );
   }
 }
@@ -550,72 +545,62 @@ class _GrowthTimelineCard extends StatelessWidget {
       direction: DismissDirection.endToStart,
       background: _dismissBackground(),
       onDismissed: (_) => onDelete(),
-      child: Card(
+      child: HomeStyleSurfaceCard(
         margin: const EdgeInsets.only(bottom: 12),
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      DateFormat('MMMM d, y').format(entry.recordedAt),
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    DateFormat('MMMM d, y').format(entry.recordedAt),
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
-                  if (isLatest)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFDDF5E8),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: const Text(
-                        'Latest',
-                        style: TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  if (entry.weightKg != null)
-                    _MetricPill(
-                      label: 'Weight',
-                      value: '${entry.weightKg!.toStringAsFixed(2)} kg',
-                    ),
-                  if (entry.heightCm != null)
-                    _MetricPill(
-                      label: 'Height',
-                      value: '${entry.heightCm!.toStringAsFixed(1)} cm',
-                    ),
-                  if (entry.headCircumferenceCm != null)
-                    _MetricPill(
-                      label: 'Head Circ.',
-                      value:
-                          '${entry.headCircumferenceCm!.toStringAsFixed(1)} cm',
-                    ),
-                ],
-              ),
-              if ((entry.notes ?? '').isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Text(
-                  entry.notes!,
-                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                if (isLatest)
+                  const HomeStylePill(
+                    label: 'Latest',
+                    icon: Icons.auto_awesome_rounded,
+                    backgroundColor: Color(0xFFDDF5E8),
+                  ),
+                IconButton(
+                  tooltip: 'Delete growth entry',
+                  onPressed: onDelete,
+                  icon: const Icon(Icons.delete_outline_rounded),
                 ),
               ],
+            ),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                if (entry.weightKg != null)
+                  _MetricPill(
+                    label: 'Weight',
+                    value: '${entry.weightKg!.toStringAsFixed(2)} kg',
+                  ),
+                if (entry.heightCm != null)
+                  _MetricPill(
+                    label: 'Height',
+                    value: '${entry.heightCm!.toStringAsFixed(1)} cm',
+                  ),
+                if (entry.headCircumferenceCm != null)
+                  _MetricPill(
+                    label: 'Head Circ.',
+                    value:
+                        '${entry.headCircumferenceCm!.toStringAsFixed(1)} cm',
+                  ),
+              ],
+            ),
+            if ((entry.notes ?? '').isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(entry.notes!, style: Theme.of(context).textTheme.bodyMedium),
             ],
-          ),
+          ],
         ),
       ),
     );
@@ -667,62 +652,58 @@ class _MilestoneCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final width = (MediaQuery.of(context).size.width - 52) / 2;
-    return SizedBox(
-      width: width,
-      child: Dismissible(
-        key: ValueKey('milestone-${milestone.id}'),
-        direction: DismissDirection.endToStart,
-        background: _dismissBackground(),
-        onDismissed: (_) => onDelete(),
-        child: Card(
-          child: Padding(
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    return Dismissible(
+      key: ValueKey('milestone-${milestone.id}'),
+      direction: DismissDirection.endToStart,
+      background: _dismissBackground(),
+      onDismissed: (_) => onDelete(),
+      child: HomeStyleSurfaceCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.primaryContainer,
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    milestone.category,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
+                Expanded(
+                  child: HomeStylePill(
+                    label: milestone.category,
+                    icon: Icons.flag_rounded,
+                    backgroundColor:
+                        Theme.of(context).colorScheme.primaryContainer,
                   ),
                 ),
-                const SizedBox(height: 12),
-                Text(
-                  milestone.title,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
+                IconButton(
+                  tooltip: 'Delete milestone',
+                  onPressed: onDelete,
+                  icon: const Icon(Icons.delete_outline_rounded),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  DateFormat('MMM d, y').format(milestone.achievedAt),
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                if ((milestone.notes ?? '').isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  Text(
-                    milestone.notes!,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                    maxLines: 4,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
               ],
             ),
-          ),
+            const SizedBox(height: 12),
+            Text(
+              milestone.title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              DateFormat('MMM d, y').format(milestone.achievedAt),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            if ((milestone.notes ?? '').isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text(
+                milestone.notes!,
+                style: Theme.of(context).textTheme.bodyMedium,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ],
         ),
       ),
     );
@@ -742,38 +723,10 @@ class _IllustratedEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(26),
-        child: Column(
-          children: [
-            Container(
-              width: 72,
-              height: 72,
-              decoration: BoxDecoration(
-                color: Theme.of(
-                  context,
-                ).colorScheme.primaryContainer.withValues(alpha: 0.8),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, size: 34),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              title,
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              description,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-          ],
-        ),
-      ),
+    return HomeStyleEmptyState(
+      icon: icon,
+      title: title,
+      description: description,
     );
   }
 }

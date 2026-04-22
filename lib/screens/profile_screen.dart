@@ -1,5 +1,9 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -8,17 +12,20 @@ import '../models/baby_profile.dart';
 import '../utils/notification_helper.dart';
 import '../utils/pdf_helper.dart';
 import '../widgets/app_accordion_section.dart';
+import '../widgets/home_style.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({
     super.key,
     required this.refreshTick,
     required this.profile,
+    required this.onPreviewChanged,
     required this.onChanged,
   });
 
   final int refreshTick;
   final BabyProfile profile;
+  final ValueChanged<BabyProfile> onPreviewChanged;
   final Future<void> Function() onChanged;
 
   @override
@@ -29,11 +36,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
   late TextEditingController _nameController;
   late DateTime? _birthDate;
   late AppThemeColor _themeColor;
+  late String? _photoBase64;
   late bool _notificationsEnabled;
   late List<String> _reminderTimes;
   bool _isSaving = false;
   bool _isExportingPdf = false;
   bool _isExportingCsv = false;
+  bool _isPickingPhoto = false;
 
   @override
   void initState() {
@@ -54,6 +63,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _nameController = TextEditingController(text: profile.name);
     _birthDate = profile.birthDate;
     _themeColor = profile.themeColorValue;
+    _photoBase64 = profile.photoBase64;
     _notificationsEnabled = profile.notificationsEnabled;
     _reminderTimes = List<String>.from(profile.reminderTimes)..sort();
   }
@@ -76,7 +86,53 @@ class _ProfileScreenState extends State<ProfileScreen> {
       setState(() {
         _birthDate = picked;
       });
+      _emitPreview();
     }
+  }
+
+  Future<void> _pickPhoto() async {
+    setState(() {
+      _isPickingPhoto = true;
+    });
+    try {
+      final picker = ImagePicker();
+      final file = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1600,
+        imageQuality: 85,
+      );
+      if (file == null) {
+        return;
+      }
+      final bytes = await file.readAsBytes();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _photoBase64 = base64Encode(bytes);
+      });
+      _emitPreview();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isPickingPhoto = false;
+        });
+      }
+    }
+  }
+
+  void _removePhoto() {
+    setState(() {
+      _photoBase64 = null;
+    });
+    _emitPreview();
   }
 
   Future<void> _addReminderTime() async {
@@ -113,6 +169,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         name: _nameController.text.trim(),
         birthDate: _birthDate,
         themeColorValue: _themeColor,
+        photoBase64: _photoBase64,
         notificationsEnabled: _notificationsEnabled,
         reminderTimes: _reminderTimes,
       );
@@ -214,46 +271,111 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return '$days days old';
   }
 
+  BabyProfile _draftProfile() {
+    return BabyProfile(
+      id: widget.profile.id,
+      name: _nameController.text.trim(),
+      birthDate: _birthDate,
+      themeColorValue: _themeColor,
+      photoBase64: _photoBase64,
+      notificationsEnabled: _notificationsEnabled,
+      reminderTimes: _reminderTimes,
+    );
+  }
+
+  void _emitPreview() {
+    widget.onPreviewChanged(_draftProfile());
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    Uint8List? photoBytes;
+    final photoValue = _photoBase64;
+    if (photoValue != null && photoValue.isNotEmpty) {
+      try {
+        photoBytes = base64Decode(photoValue);
+      } catch (_) {
+        photoBytes = null;
+      }
+    }
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
       children: [
-        Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            color: scheme.surface,
-            border: Border.all(color: scheme.outlineVariant),
-          ),
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Baby Profile',
-                style: Theme.of(context).textTheme.headlineMedium,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'A cleaner control center for details, reminders, and exports with the new design language applied.',
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
+        HomeStylePageHeader(
+          eyebrow: 'Care Center',
+          title: 'Baby Profile',
+          subtitle: 'Details and settings',
+          icon: Icons.child_care_rounded,
+          badge: _birthDate == null ? 'Profile setup' : 'Profile ready',
+          gradient: const [
+            Color(0xFFFFF4E8),
+            Color(0xFFF8EEFF),
+            Color(0xFFEAF6FF),
+          ],
         ),
         const SizedBox(height: 20),
         AppAccordionSection(
           title: 'Profile details',
-          subtitle: 'Name, birth date, and age summary.',
+          subtitle: 'Name and age',
           initiallyExpanded: true,
           leading: Icon(Icons.badge_rounded, color: scheme.primary),
           children: [
+            Center(
+              child: Column(
+                children: [
+                  CircleAvatar(
+                    radius: 42,
+                    backgroundColor: scheme.surfaceContainerHighest,
+                    backgroundImage:
+                        photoBytes != null ? MemoryImage(photoBytes) : null,
+                    child:
+                        photoBytes == null
+                            ? Icon(
+                              Icons.child_care_rounded,
+                              size: 38,
+                              color: scheme.primary,
+                            )
+                            : null,
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    alignment: WrapAlignment.center,
+                    children: [
+                      FilledButton.icon(
+                        onPressed: _isPickingPhoto ? null : _pickPhoto,
+                        icon:
+                            _isPickingPhoto
+                                ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                                : const Icon(Icons.photo_library_rounded),
+                        label: Text(
+                          photoBytes == null ? 'Upload photo' : 'Change photo',
+                        ),
+                      ),
+                      if (photoBytes != null)
+                        OutlinedButton.icon(
+                          onPressed: _removePhoto,
+                          icon: const Icon(Icons.delete_outline_rounded),
+                          label: const Text('Remove'),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                ],
+              ),
+            ),
             TextField(
               controller: _nameController,
+              onChanged: (_) => _emitPreview(),
               decoration: const InputDecoration(
                 labelText: 'Baby name',
                 prefixIcon: Icon(Icons.edit_rounded),
@@ -279,9 +401,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               child: Text(
                 _buildAgeLabel(),
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
               ),
             ),
           ],
@@ -289,7 +411,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         const SizedBox(height: 16),
         AppAccordionSection(
           title: 'Appearance',
-          subtitle: 'Theme accent and app presentation.',
+          subtitle: 'Theme color',
           leading: Icon(Icons.palette_outlined, color: scheme.primary),
           children: [
             Text(
@@ -303,6 +425,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 setState(() {
                   _themeColor = selection.first;
                 });
+                _emitPreview();
               },
               segments:
                   AppThemeColor.values
@@ -319,16 +442,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
         const SizedBox(height: 16),
         AppAccordionSection(
           title: 'Reminder settings',
-          subtitle: 'Local reminders and quick reminder chips.',
+          subtitle: 'Reminder times',
           leading: Icon(Icons.notifications_outlined, color: scheme.primary),
           children: [
             SwitchListTile.adaptive(
               value: _notificationsEnabled,
               contentPadding: EdgeInsets.zero,
               title: const Text('Enable local reminders'),
-              subtitle: const Text(
-                'Notifications stay on this device and use your saved reminder times.',
-              ),
+              subtitle: const Text('Use saved reminder times.'),
               onChanged: (value) {
                 setState(() {
                   _notificationsEnabled = value;
@@ -363,7 +484,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               Padding(
                 padding: const EdgeInsets.only(top: 12),
                 child: Text(
-                  'Try reminders like 9:00 AM, 12:00 PM, and 3:00 PM.',
+                  'Example: 9:00 AM, 12:00 PM, 3:00 PM.',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -374,11 +495,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
         const SizedBox(height: 16),
         AppAccordionSection(
           title: 'Exports',
-          subtitle: 'PDF and CSV sharing actions.',
+          subtitle: 'Share data',
           leading: Icon(Icons.ios_share_rounded, color: scheme.primary),
           children: [
             Text(
-              'Share a 7-day PDF summary or your full care history as CSV.',
+              'Export PDF or CSV.',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 16),

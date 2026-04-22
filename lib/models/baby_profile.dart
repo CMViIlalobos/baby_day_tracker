@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 enum AppThemeColor { blue, pink, mint }
 
@@ -25,6 +26,7 @@ class BabyProfile {
     required this.name,
     required this.birthDate,
     required this.themeColorValue,
+    required this.photoBase64,
     required this.notificationsEnabled,
     required this.reminderTimes,
   });
@@ -33,6 +35,7 @@ class BabyProfile {
   final String name;
   final DateTime? birthDate;
   final AppThemeColor themeColorValue;
+  final String? photoBase64;
   final bool notificationsEnabled;
   final List<String> reminderTimes;
 
@@ -42,6 +45,7 @@ class BabyProfile {
       name: '',
       birthDate: null,
       themeColorValue: AppThemeColor.blue,
+      photoBase64: null,
       notificationsEnabled: false,
       reminderTimes: [],
     );
@@ -53,6 +57,8 @@ class BabyProfile {
     DateTime? birthDate,
     bool clearBirthDate = false,
     AppThemeColor? themeColorValue,
+    String? photoBase64,
+    bool clearPhoto = false,
     bool? notificationsEnabled,
     List<String>? reminderTimes,
   }) {
@@ -61,6 +67,7 @@ class BabyProfile {
       name: name ?? this.name,
       birthDate: clearBirthDate ? null : (birthDate ?? this.birthDate),
       themeColorValue: themeColorValue ?? this.themeColorValue,
+      photoBase64: clearPhoto ? null : (photoBase64 ?? this.photoBase64),
       notificationsEnabled: notificationsEnabled ?? this.notificationsEnabled,
       reminderTimes: reminderTimes ?? this.reminderTimes,
     );
@@ -72,6 +79,7 @@ class BabyProfile {
       'name': name,
       'birthDate': birthDate?.toIso8601String(),
       'themeColor': themeColorValue.dbValue,
+      'photoBase64': photoBase64,
       'notificationsEnabled': notificationsEnabled ? 1 : 0,
       'reminderTimes': jsonEncode(reminderTimes),
     };
@@ -87,12 +95,25 @@ class BabyProfile {
               ? null
               : DateTime.tryParse(map['birthDate'] as String),
       themeColorValue: AppThemeColorX.fromDbValue(map['themeColor'] as String?),
+      photoBase64: map['photoBase64'] as String?,
       notificationsEnabled: (map['notificationsEnabled'] as int? ?? 0) == 1,
       reminderTimes:
           reminderJson == null || reminderJson.isEmpty
               ? []
               : List<String>.from(jsonDecode(reminderJson) as List<dynamic>),
     );
+  }
+
+  Uint8List? get photoBytes {
+    final value = photoBase64;
+    if (value == null || value.isEmpty) {
+      return null;
+    }
+    try {
+      return base64Decode(value);
+    } catch (_) {
+      return null;
+    }
   }
 }
 

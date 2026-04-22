@@ -59,6 +59,33 @@ class BabyEvent {
   final String? medicineDose;
   final String? medicineUnit;
 
+  BabyEvent copyWith({
+    int? id,
+    EventType? type,
+    DateTime? timestamp,
+    String? notes,
+    bool clearNotes = false,
+    int? feedingDuration,
+    String? feedingSide,
+    String? diaperType,
+    int? sleepDuration,
+    String? medicineDose,
+    String? medicineUnit,
+  }) {
+    return BabyEvent(
+      id: id ?? this.id,
+      type: type ?? this.type,
+      timestamp: timestamp ?? this.timestamp,
+      notes: clearNotes ? null : (notes ?? this.notes),
+      feedingDuration: feedingDuration ?? this.feedingDuration,
+      feedingSide: feedingSide ?? this.feedingSide,
+      diaperType: diaperType ?? this.diaperType,
+      sleepDuration: sleepDuration ?? this.sleepDuration,
+      medicineDose: medicineDose ?? this.medicineDose,
+      medicineUnit: medicineUnit ?? this.medicineUnit,
+    );
+  }
+
   Map<String, dynamic> toMap() {
     return {
       'id': id,

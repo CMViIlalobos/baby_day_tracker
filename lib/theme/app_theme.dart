@@ -371,11 +371,11 @@ class AppTheme {
   static Color _primaryForAccent(AppThemeColor accent, {bool dark = false}) {
     return switch (accent) {
       AppThemeColor.blue =>
-        dark ? const Color(0xFFDCEAFE) : const Color(0xFF030213),
+        dark ? const Color(0xFF93C5FD) : const Color(0xFF2563EB),
       AppThemeColor.pink =>
-        dark ? const Color(0xFFF8D6E5) : const Color(0xFF4A2136),
+        dark ? const Color(0xFFF9A8D4) : const Color(0xFFDB2777),
       AppThemeColor.mint =>
-        dark ? const Color(0xFFD8F4EA) : const Color(0xFF163A31),
+        dark ? const Color(0xFF6EE7B7) : const Color(0xFF059669),
     };
   }
 }

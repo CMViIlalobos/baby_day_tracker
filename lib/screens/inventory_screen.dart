@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../database/database_helper.dart';
 import '../models/event.dart';
+import '../widgets/home_style.dart';
 
 class InventoryScreen extends StatefulWidget {
   const InventoryScreen({
@@ -144,12 +145,11 @@ class _InventoryScreenState extends State<InventoryScreen> {
           else ...[
             _SectionHeader(
               title: 'Inventory Overview',
-              subtitle: 'Quick visibility into supplies that matter most.',
+              subtitle: 'Supply status',
             ),
             const SizedBox(height: 12),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
+            HomeStyleResponsiveGrid(
+              mainAxisExtent: 176,
               children: [
                 _InventoryStatCard(
                   title: 'Items tracked',
@@ -181,8 +181,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
             const SizedBox(height: 22),
             _SectionHeader(
               title: 'Browse Supplies',
-              subtitle:
-                  'Filter by category and tap edit or use quick plus/minus actions.',
+              subtitle: 'Filter and manage',
             ),
             const SizedBox(height: 12),
             SingleChildScrollView(
@@ -210,13 +209,12 @@ class _InventoryScreenState extends State<InventoryScreen> {
             if (_items.isEmpty)
               const _InventoryEmptyState(
                 title: 'No inventory items yet',
-                description:
-                    'Start with diapers, wipes, formula, bottles, medicine, or bath supplies.',
+                description: 'Add your first supply item.',
               )
             else if (visibleItems.isEmpty)
               const _InventoryEmptyState(
                 title: 'No items in this category',
-                description: 'Try another category filter or add a new item.',
+                description: 'Try another filter.',
               )
             else
               ...visibleItems.map(
@@ -369,24 +367,7 @@ class _SectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: Theme.of(
-            context,
-          ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          subtitle,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-        ),
-      ],
-    );
+    return HomeStyleSectionHeader(title: title, subtitle: subtitle);
   }
 }
 
@@ -407,42 +388,16 @@ class _InventoryStatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final width = (MediaQuery.of(context).size.width - 52) / 2;
-    return SizedBox(
-      width: width,
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: tint,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Icon(icon, color: alert ? Colors.orange.shade800 : null),
-              ),
-              const SizedBox(height: 14),
-              Text(
-                title,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                value,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-              ),
-            ],
-          ),
-        ),
-      ),
+    return HomeStyleInfoCard(
+      title: title,
+      value: value,
+      subtitle: alert ? 'Needs attention' : 'Looking steady',
+      icon: icon,
+      gradientColors: [tint.withValues(alpha: 0.68), Colors.white],
+      iconColor: alert ? const Color(0xFFF97316) : const Color(0xFF2563EB),
+      labelColor: const Color(0xFF374151),
+      valueColor: const Color(0xFF111827),
+      subtitleColor: const Color(0xFF6B7280),
     );
   }
 }
@@ -473,112 +428,97 @@ class _InventorySupplyCard extends StatelessWidget {
       direction: DismissDirection.endToStart,
       background: _dismissBackground(),
       onDismissed: (_) => onDelete(),
-      child: Card(
+      child: HomeStyleSurfaceCard(
         margin: const EdgeInsets.only(bottom: 12),
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item.name,
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.w800),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.name,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${item.category} • Updated ${DateFormat('MMM d, h:mm a').format(item.updatedAt)}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '${item.category} • Updated ${DateFormat('MMM d, h:mm a').format(item.updatedAt)}',
-                          style: Theme.of(
-                            context,
-                          ).textTheme.bodySmall?.copyWith(
-                            color:
-                                Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                  IconButton(
-                    onPressed: onEdit,
-                    icon: const Icon(Icons.edit_rounded),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '${item.quantity} ${item.unit}',
-                          style: Theme.of(context).textTheme.headlineSmall
-                              ?.copyWith(fontWeight: FontWeight.w900),
-                        ),
-                        const SizedBox(height: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: statusColor,
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            statusText,
-                            style: const TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton.filledTonal(
-                    onPressed: onDecrease,
-                    icon: const Icon(Icons.remove_rounded),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton.filled(
-                    onPressed: onIncrease,
-                    icon: const Icon(Icons.add_rounded),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              LinearProgressIndicator(
-                value:
-                    item.lowStockThreshold <= 0
-                        ? null
-                        : (item.quantity / (item.lowStockThreshold * 3)).clamp(
-                          0.0,
-                          1.0,
-                        ),
-                minHeight: 10,
-                borderRadius: BorderRadius.circular(999),
-                backgroundColor:
-                    Theme.of(context).colorScheme.surfaceContainerHighest,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Low-stock threshold: ${item.lowStockThreshold} ${item.unit}',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              if ((item.notes ?? '').isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(
-                  item.notes!,
-                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                IconButton(
+                  onPressed: onEdit,
+                  icon: const Icon(Icons.edit_rounded),
                 ),
               ],
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${item.quantity} ${item.unit}',
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(fontWeight: FontWeight.w900),
+                      ),
+                      const SizedBox(height: 6),
+                      HomeStylePill(
+                        label: statusText,
+                        icon:
+                            item.isLowStock
+                                ? Icons.warning_amber_rounded
+                                : Icons.check_circle_rounded,
+                        backgroundColor: statusColor,
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton.filledTonal(
+                  onPressed: onDecrease,
+                  icon: const Icon(Icons.remove_rounded),
+                ),
+                const SizedBox(width: 8),
+                IconButton.filled(
+                  onPressed: onIncrease,
+                  icon: const Icon(Icons.add_rounded),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            LinearProgressIndicator(
+              value:
+                  item.lowStockThreshold <= 0
+                      ? null
+                      : (item.quantity / (item.lowStockThreshold * 3)).clamp(
+                        0.0,
+                        1.0,
+                      ),
+              minHeight: 10,
+              borderRadius: BorderRadius.circular(999),
+              backgroundColor:
+                  Theme.of(context).colorScheme.surfaceContainerHighest,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Low-stock threshold: ${item.lowStockThreshold} ${item.unit}',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            if ((item.notes ?? '').isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(item.notes!, style: Theme.of(context).textTheme.bodyMedium),
             ],
-          ),
+          ],
         ),
       ),
     );
@@ -593,38 +533,10 @@ class _InventoryEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(26),
-        child: Column(
-          children: [
-            Container(
-              width: 72,
-              height: 72,
-              decoration: BoxDecoration(
-                color: Theme.of(
-                  context,
-                ).colorScheme.primaryContainer.withValues(alpha: 0.8),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.inventory_2_rounded, size: 34),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              title,
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              description,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-          ],
-        ),
-      ),
+    return HomeStyleEmptyState(
+      icon: Icons.inventory_2_rounded,
+      title: title,
+      description: description,
     );
   }
 }
@@ -662,6 +574,7 @@ class _InventoryItemBottomSheetState extends State<_InventoryItemBottomSheet> {
   String _category = 'Diapers';
   String _unit = 'pcs';
   bool _isSaving = false;
+  bool _isDeleting = false;
 
   @override
   void initState() {
@@ -728,6 +641,33 @@ class _InventoryItemBottomSheetState extends State<_InventoryItemBottomSheet> {
       ).showSnackBar(SnackBar(content: Text(error.toString())));
       setState(() {
         _isSaving = false;
+      });
+    }
+  }
+
+  Future<void> _delete() async {
+    final item = widget.item;
+    if (item?.id == null) {
+      return;
+    }
+    setState(() {
+      _isDeleting = true;
+    });
+    try {
+      await DatabaseHelper.instance.deleteInventoryItem(item!.id!);
+      if (!mounted) {
+        return;
+      }
+      Navigator.of(context).pop(true);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
+      setState(() {
+        _isDeleting = false;
       });
     }
   }
@@ -873,6 +813,26 @@ class _InventoryItemBottomSheetState extends State<_InventoryItemBottomSheet> {
                   ),
                 ),
                 const SizedBox(height: 20),
+                if (widget.item != null) ...[
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: (_isSaving || _isDeleting) ? null : _delete,
+                      icon:
+                          _isDeleting
+                              ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                              : const Icon(Icons.delete_outline_rounded),
+                      label: Text(_isDeleting ? 'Deleting...' : 'Delete item'),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(

@@ -7,10 +7,12 @@ class EventTimelineItem extends StatelessWidget {
   const EventTimelineItem({
     super.key,
     required this.event,
+    required this.onTap,
     required this.onDelete,
   });
 
   final BabyEvent event;
+  final VoidCallback onTap;
   final VoidCallback onDelete;
 
   @override
@@ -32,6 +34,7 @@ class EventTimelineItem extends StatelessWidget {
       child: Card(
         margin: const EdgeInsets.only(bottom: 12),
         child: ListTile(
+          onTap: onTap,
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 18,
             vertical: 10,
@@ -65,6 +68,7 @@ class EventTimelineItem extends StatelessWidget {
                 ),
             ],
           ),
+          trailing: const Icon(Icons.edit_rounded),
         ),
       ),
     );

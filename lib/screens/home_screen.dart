@@ -102,6 +102,20 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _openEditEventSheet(BabyEvent event) async {
+    final changed = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder:
+          (_) => AddEventBottomSheet(initialType: event.type, event: event),
+    );
+    if (changed == true) {
+      await _loadData();
+      await widget.onChanged();
+    }
+  }
+
   Future<void> _deleteEvent(BabyEvent event) async {
     if (event.id == null) return;
     try {
@@ -161,7 +175,7 @@ class _HomeScreenState extends State<HomeScreen> {
     required DateTime date,
     ReminderItem? reminder,
   }) async {
-    final result = await showModalBottomSheet<ReminderItem>(
+    final result = await showModalBottomSheet<_ReminderEditorResult>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
@@ -169,8 +183,17 @@ class _HomeScreenState extends State<HomeScreen> {
           (_) => _ReminderEditorSheet(initialDate: date, reminder: reminder),
     );
 
-    if (result != null) {
-      await _saveReminder(result);
+    if (result == null) {
+      return;
+    }
+
+    if (result.deleted && reminder != null) {
+      await _deleteReminder(reminder);
+      return;
+    }
+
+    if (result.reminder != null) {
+      await _saveReminder(result.reminder!);
     }
   }
 
@@ -251,7 +274,11 @@ class _HomeScreenState extends State<HomeScreen> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _FigmaWelcomeHeader(babyName: greetingName, date: DateTime.now()),
+          _FigmaWelcomeHeader(
+            babyName: greetingName,
+            date: DateTime.now(),
+            profile: widget.profile,
+          ),
           const SizedBox(height: 16),
           _FigmaQuickStatsGrid(
             lastFeeding: _insights.lastFeeding,
@@ -330,6 +357,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ..._todayEvents.map(
               (event) => EventTimelineItem(
                 event: event,
+                onTap: () => _openEditEventSheet(event),
                 onDelete: () => _deleteEvent(event),
               ),
             ),
@@ -340,10 +368,15 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class _FigmaWelcomeHeader extends StatelessWidget {
-  const _FigmaWelcomeHeader({required this.babyName, required this.date});
+  const _FigmaWelcomeHeader({
+    required this.babyName,
+    required this.date,
+    required this.profile,
+  });
 
   final String babyName;
   final DateTime date;
+  final BabyProfile profile;
 
   @override
   Widget build(BuildContext context) {
@@ -361,6 +394,13 @@ class _FigmaWelcomeHeader extends StatelessWidget {
         const SizedBox(height: 4),
         Row(
           children: [
+            if (profile.photoBytes != null) ...[
+              CircleAvatar(
+                radius: 24,
+                backgroundImage: MemoryImage(profile.photoBytes!),
+              ),
+              const SizedBox(width: 12),
+            ],
             Expanded(
               child: Text(
                 'How\'s $babyName today?',
@@ -929,6 +969,9 @@ class _FigmaUpcomingAppointments extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final monthLabel = DateFormat('MMMM yyyy').format(focusedMonth);
+    final selectedDateLabel = DateFormat(
+      'EEE, MMM d, yyyy',
+    ).format(selectedDate);
 
     return Container(
       decoration: BoxDecoration(
@@ -1022,6 +1065,23 @@ class _FigmaUpcomingAppointments extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.72),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Text(
+              'Selected: $selectedDateLabel',
+              style: const TextStyle(
+                color: Color(0xFF4338CA),
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
           _MiniCalendar(
             focusedMonth: focusedMonth,
             selectedDate: selectedDate,
@@ -1191,7 +1251,7 @@ class _MiniCalendar extends StatelessWidget {
         ),
         const SizedBox(height: 6),
         GridView.builder(
-          itemCount: 35,
+          itemCount: 42,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -1380,6 +1440,13 @@ class _ScheduledReminder {
   final DateTime occurrence;
 }
 
+class _ReminderEditorResult {
+  const _ReminderEditorResult({this.reminder, this.deleted = false});
+
+  final ReminderItem? reminder;
+  final bool deleted;
+}
+
 class _ReminderEditorSheet extends StatefulWidget {
   const _ReminderEditorSheet({required this.initialDate, this.reminder});
 
@@ -1398,6 +1465,7 @@ class _ReminderEditorSheetState extends State<_ReminderEditorSheet> {
   late ReminderRepeat _repeat;
   late DateTime _selectedDate;
   late TimeOfDay _selectedTime;
+  bool _isDeleting = false;
 
   @override
   void initState() {
@@ -1462,17 +1530,26 @@ class _ReminderEditorSheetState extends State<_ReminderEditorSheet> {
     );
 
     Navigator.of(context).pop(
-      ReminderItem(
-        id:
-            widget.reminder?.id ??
-            DateTime.now().microsecondsSinceEpoch.toString(),
-        type: _type,
-        title: _titleController.text.trim(),
-        dateTime: dateTime,
-        notes: _notesController.text.trim(),
-        repeat: _repeat,
+      _ReminderEditorResult(
+        reminder: ReminderItem(
+          id:
+              widget.reminder?.id ??
+              DateTime.now().microsecondsSinceEpoch.toString(),
+          type: _type,
+          title: _titleController.text.trim(),
+          dateTime: dateTime,
+          notes: _notesController.text.trim(),
+          repeat: _repeat,
+        ),
       ),
     );
+  }
+
+  void _delete() {
+    setState(() {
+      _isDeleting = true;
+    });
+    Navigator.of(context).pop(const _ReminderEditorResult(deleted: true));
   }
 
   @override
@@ -1496,13 +1573,7 @@ class _ReminderEditorSheetState extends State<_ReminderEditorSheet> {
                 ),
               ),
               const SizedBox(height: 8),
-              Text(
-                'Set the reminder type, date, time, notes, and repeat schedule.',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyMedium?.copyWith(height: 1.5),
-              ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 10),
               DropdownButtonFormField<ReminderType>(
                 value: _type,
                 decoration: const InputDecoration(
@@ -1612,6 +1683,26 @@ class _ReminderEditorSheetState extends State<_ReminderEditorSheet> {
                 ),
               ),
               const SizedBox(height: 24),
+              if (isEditing) ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: _isDeleting ? null : _delete,
+                    icon:
+                        _isDeleting
+                            ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                            : const Icon(Icons.delete_outline_rounded),
+                    label: Text(
+                      _isDeleting ? 'Deleting...' : 'Delete reminder',
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
               SizedBox(
                 width: double.infinity,
                 child: FilledButton(

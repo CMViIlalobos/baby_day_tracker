@@ -80,6 +80,12 @@ class _BabyDayTrackerAppState extends State<BabyDayTrackerApp> {
     });
   }
 
+  void _handleProfilePreview(BabyProfile profile) {
+    setState(() {
+      _profile = profile;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final profile = _profile ?? BabyProfile.empty();
@@ -143,6 +149,7 @@ class _BabyDayTrackerAppState extends State<BabyDayTrackerApp> {
                       ProfileScreen(
                         refreshTick: _refreshTick,
                         profile: profile,
+                        onPreviewChanged: _handleProfilePreview,
                         onChanged: _handleDataChanged,
                       ),
                     ],
@@ -181,5 +188,4 @@ class _BabyDayTrackerAppState extends State<BabyDayTrackerApp> {
               ),
     );
   }
-
 }

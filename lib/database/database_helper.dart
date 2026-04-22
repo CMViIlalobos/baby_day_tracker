@@ -12,7 +12,7 @@ class DatabaseHelper {
 
   static final DatabaseHelper instance = DatabaseHelper._();
   static const _databaseName = 'baby_day_tracker.db';
-  static const _databaseVersion = 2;
+  static const _databaseVersion = 3;
 
   Database? _database;
 
@@ -64,6 +64,9 @@ class DatabaseHelper {
       await _createGrowthTable(db);
       await _createMilestonesTable(db);
     }
+    if (oldVersion < 3) {
+      await db.execute('ALTER TABLE baby_profile ADD COLUMN photoBase64 TEXT');
+    }
   }
 
   Future<void> _createEventsTable(Database db) async {
@@ -90,6 +93,7 @@ class DatabaseHelper {
         name TEXT,
         birthDate TEXT,
         themeColor TEXT NOT NULL,
+        photoBase64 TEXT,
         notificationsEnabled INTEGER NOT NULL DEFAULT 0,
         reminderTimes TEXT NOT NULL
       )
@@ -151,6 +155,23 @@ class DatabaseHelper {
       return await db.delete('events', where: 'id = ?', whereArgs: [id]);
     } catch (error) {
       throw Exception('Failed to delete event: $error');
+    }
+  }
+
+  Future<int> updateEvent(BabyEvent event) async {
+    if (event.id == null) {
+      throw Exception('Event id is required to update');
+    }
+    try {
+      final db = await database;
+      return await db.update(
+        'events',
+        event.toMap(),
+        where: 'id = ?',
+        whereArgs: [event.id],
+      );
+    } catch (error) {
+      throw Exception('Failed to update event: $error');
     }
   }
 

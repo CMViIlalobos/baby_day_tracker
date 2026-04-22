@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../database/database_helper.dart';
 import '../models/baby_profile.dart';
+import '../widgets/home_style.dart';
 import '../models/event.dart';
 import '../widgets/stats_chart.dart';
 
@@ -96,18 +97,17 @@ class _StatsScreenState extends State<StatsScreen> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
         children: [
-          Text(
-            'Statistics',
-            style: Theme.of(
-              context,
-            ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Recent care patterns, sleep rhythm, and tracking consistency.',
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
+          HomeStylePageHeader(
+            eyebrow: 'Daily Insights',
+            title: 'Statistics',
+            subtitle: 'Care trends',
+            icon: Icons.bar_chart_rounded,
+            badge: _ageLabel(widget.profile.birthDate),
+            gradient: const [
+              Color(0xFFEAF6FF),
+              Color(0xFFFFF4E8),
+              Color(0xFFF8EEFF),
+            ],
           ),
           const SizedBox(height: 20),
           if (_isLoading)
@@ -116,100 +116,111 @@ class _StatsScreenState extends State<StatsScreen> {
               child: Center(child: CircularProgressIndicator()),
             )
           else ...[
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
+            HomeStyleResponsiveGrid(
+              mainAxisExtent: 176,
               children: [
                 _StatCard(
                   title: 'Feedings',
                   value: '${_stats.totalFeedings}',
                   subtitle: 'Last 24 hours',
+                  icon: Icons.restaurant_rounded,
+                  gradientColors: const [Color(0xFFFFF1F2), Color(0xFFFFE4E6)],
+                  iconColor: const Color(0xFFE11D48),
+                  labelColor: const Color(0xFFBE123C),
+                  valueColor: const Color(0xFF881337),
+                  subtitleColor: const Color(0xFFFB7185),
                 ),
                 _StatCard(
                   title: 'Diapers',
                   value: '${_stats.totalDiapers}',
                   subtitle:
-                      'Wet ${_stats.wetCount} • Dirty ${_stats.dirtyCount} • Both ${_stats.bothCount}',
+                      '${_stats.wetCount} wet • ${_stats.dirtyCount} dirty • ${_stats.bothCount} both',
+                  icon: Icons.baby_changing_station_rounded,
+                  gradientColors: const [Color(0xFFEFF6FF), Color(0xFFDBEAFE)],
+                  iconColor: const Color(0xFF2563EB),
+                  labelColor: const Color(0xFF1D4ED8),
+                  valueColor: const Color(0xFF1E3A8A),
+                  subtitleColor: const Color(0xFF60A5FA),
                 ),
                 _StatCard(
                   title: 'Sleep',
                   value: _stats.sleepHoursLabel,
                   subtitle: 'Last 24 hours total',
+                  icon: Icons.bedtime_rounded,
+                  gradientColors: const [Color(0xFFFAF5FF), Color(0xFFF3E8FF)],
+                  iconColor: const Color(0xFFA855F7),
+                  labelColor: const Color(0xFF7E22CE),
+                  valueColor: const Color(0xFF4C1D95),
+                  subtitleColor: const Color(0xFFC084FC),
                 ),
                 _StatCard(
                   title: 'Medicine',
                   value: _stats.lastMedicineLabel,
                   subtitle: 'Most recent dose',
+                  icon: Icons.medication_rounded,
+                  gradientColors: const [Color(0xFFECFDF5), Color(0xFFD1FAE5)],
+                  iconColor: const Color(0xFF10B981),
+                  labelColor: const Color(0xFF047857),
+                  valueColor: const Color(0xFF065F46),
+                  subtitleColor: const Color(0xFF34D399),
                 ),
               ],
             ),
             const SizedBox(height: 20),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Last 7 days activity',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Bars show the total care logs captured each day.',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    StatsChart(data: _stats.dailyEventCounts),
-                  ],
-                ),
-              ),
+            HomeStyleSectionHeader(
+              title: 'Activity Trend',
+              subtitle: 'Last 7 days',
+            ),
+            const SizedBox(height: 12),
+            HomeStyleSurfaceCard(
+              padding: const EdgeInsets.all(20),
+              child: StatsChart(data: _stats.dailyEventCounts),
             ),
             const SizedBox(height: 16),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
+            const HomeStyleSectionHeader(
+              title: 'Highlights',
+              subtitle: 'Key averages',
+            ),
+            const SizedBox(height: 12),
+            HomeStyleResponsiveGrid(
+              mainAxisExtent: 176,
               children: [
                 _HighlightCard(
                   title: 'Average sleep',
                   value: _stats.averageSleepLabel,
-                  subtitle: 'Across the last 7 days',
+                  subtitle: '7-day average',
                   icon: Icons.bedtime_rounded,
                 ),
                 _HighlightCard(
                   title: 'Average feeds/day',
                   value: _stats.averageFeedsLabel,
-                  subtitle: 'Based on the last 7 days',
+                  subtitle: '7-day average',
                   icon: Icons.restaurant_rounded,
                 ),
                 _HighlightCard(
                   title: 'Longest sleep',
                   value: _stats.longestSleepLabel,
-                  subtitle: 'Best logged stretch',
+                  subtitle: 'Best stretch',
                   icon: Icons.hotel_rounded,
                 ),
                 _HighlightCard(
                   title: 'Care streak',
                   value: _stats.trackingStreakLabel,
-                  subtitle: 'Consecutive days with logs',
+                  subtitle: 'Active streak',
                   icon: Icons.local_fire_department_rounded,
                   alert: _stats.currentStreak == 0,
                 ),
                 _HighlightCard(
                   title: 'Inventory alerts',
                   value: '${_stats.lowStockCount}',
-                  subtitle: 'Items below threshold',
+                  subtitle: 'Low stock',
                   icon: Icons.inventory_2_rounded,
                   alert: _stats.lowStockCount > 0,
                 ),
                 _HighlightCard(
                   title: 'Baby age',
                   value: _ageLabel(widget.profile.birthDate),
-                  subtitle: 'Based on profile birth date',
+                  subtitle: 'Profile age',
                   icon: Icons.child_friendly_rounded,
                 ),
               ],
@@ -239,47 +250,36 @@ class _StatCard extends StatelessWidget {
     required this.title,
     required this.value,
     required this.subtitle,
+    required this.icon,
+    required this.gradientColors,
+    required this.iconColor,
+    required this.labelColor,
+    required this.valueColor,
+    required this.subtitleColor,
   });
 
   final String title;
   final String value;
   final String subtitle;
+  final IconData icon;
+  final List<Color> gradientColors;
+  final Color iconColor;
+  final Color labelColor;
+  final Color valueColor;
+  final Color subtitleColor;
 
   @override
   Widget build(BuildContext context) {
-    final width = (MediaQuery.of(context).size.width - 52) / 2;
-    return SizedBox(
-      width: width,
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                value,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                subtitle,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    return HomeStyleInfoCard(
+      title: title,
+      value: value,
+      subtitle: subtitle,
+      icon: icon,
+      gradientColors: gradientColors,
+      iconColor: iconColor,
+      labelColor: labelColor,
+      valueColor: valueColor,
+      subtitleColor: subtitleColor,
     );
   }
 }
@@ -301,43 +301,19 @@ class _HighlightCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final width = (MediaQuery.of(context).size.width - 52) / 2;
-    final color =
-        alert ? Colors.orange.shade700 : Theme.of(context).colorScheme.primary;
-    return SizedBox(
-      width: width,
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(icon, color: color),
-              const SizedBox(height: 12),
-              Text(
-                title,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                value,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                subtitle,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    return HomeStyleInfoCard(
+      title: title,
+      value: value,
+      subtitle: subtitle,
+      icon: icon,
+      gradientColors:
+          alert
+              ? const [Color(0xFFFFF7ED), Color(0xFFFFEDD5)]
+              : const [Color(0xFFF5F3FF), Color(0xFFEDE9FE)],
+      iconColor: alert ? const Color(0xFFF97316) : const Color(0xFF8B5CF6),
+      labelColor: alert ? const Color(0xFF9A3412) : const Color(0xFF6D28D9),
+      valueColor: alert ? const Color(0xFF7C2D12) : const Color(0xFF4C1D95),
+      subtitleColor: alert ? const Color(0xFFEA580C) : const Color(0xFF8B5CF6),
     );
   }
 }

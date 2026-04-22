@@ -43,6 +43,8 @@ class AppAccordionSection extends StatelessWidget {
           padding: const EdgeInsets.only(top: 2),
           child: Text(
             subtitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),

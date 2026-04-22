@@ -5,6 +5,7 @@ import 'package:share_plus/share_plus.dart';
 import '../database/database_helper.dart';
 import '../models/baby_profile.dart';
 import '../utils/pdf_helper.dart';
+import '../widgets/home_style.dart';
 
 class ExportScreen extends StatefulWidget {
   const ExportScreen({
@@ -87,91 +88,63 @@ class _ExportScreenState extends State<ExportScreen> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
       children: [
-        Text(
-          'Export',
-          style: Theme.of(
-            context,
-          ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w700),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Create a 7-day PDF summary or share your full log as CSV.',
-          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
+        const HomeStylePageHeader(
+          eyebrow: 'Sharing',
+          title: 'Export Data',
+          subtitle: 'PDF and CSV',
+          icon: Icons.ios_share_rounded,
+          gradient: [Color(0xFFFFF4E8), Color(0xFFEAF6FF), Color(0xFFEEFCEB)],
         ),
         const SizedBox(height: 20),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'PDF export',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+        HomeStyleSurfaceCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const HomeStyleSectionHeader(
+                title: 'PDF Export',
+                subtitle: 'Last 7 days',
+              ),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: _isExportingPdf ? null : _exportPdf,
+                icon:
+                    _isExportingPdf
+                        ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                        : const Icon(Icons.picture_as_pdf_rounded),
+                label: Text(
+                  _isExportingPdf ? 'Preparing PDF...' : 'Export to PDF',
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  'Includes baby name, birth date, and all events from the last 7 days grouped by date.',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-                const SizedBox(height: 16),
-                FilledButton.icon(
-                  onPressed: _isExportingPdf ? null : _exportPdf,
-                  icon:
-                      _isExportingPdf
-                          ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                          : const Icon(Icons.picture_as_pdf_rounded),
-                  label: Text(
-                    _isExportingPdf ? 'Preparing PDF...' : 'Export to PDF',
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 16),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'CSV export',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Exports every event stored locally on the device and opens the platform share sheet.',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-                const SizedBox(height: 16),
-                OutlinedButton.icon(
-                  onPressed: _isExportingCsv ? null : _shareCsv,
-                  icon:
-                      _isExportingCsv
-                          ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                          : const Icon(Icons.table_chart_rounded),
-                  label: Text(
-                    _isExportingCsv ? 'Preparing CSV...' : 'Share CSV',
-                  ),
-                ),
-              ],
-            ),
+        HomeStyleSurfaceCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const HomeStyleSectionHeader(
+                title: 'CSV Export',
+                subtitle: 'Full event log',
+              ),
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                onPressed: _isExportingCsv ? null : _shareCsv,
+                icon:
+                    _isExportingCsv
+                        ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                        : const Icon(Icons.table_chart_rounded),
+                label: Text(_isExportingCsv ? 'Preparing CSV...' : 'Share CSV'),
+              ),
+            ],
           ),
         ),
       ],
