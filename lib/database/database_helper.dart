@@ -12,7 +12,7 @@ class DatabaseHelper {
 
   static final DatabaseHelper instance = DatabaseHelper._();
   static const _databaseName = 'baby_day_tracker.db';
-  static const _databaseVersion = 3;
+  static const _databaseVersion = 4;
 
   Database? _database;
 
@@ -55,6 +55,7 @@ class DatabaseHelper {
     await _createInventoryTable(db);
     await _createGrowthTable(db);
     await _createMilestonesTable(db);
+    await _createBabyPhotosTable(db);
     await db.insert('baby_profile', BabyProfile.empty().toMap());
   }
 
@@ -66,6 +67,9 @@ class DatabaseHelper {
     }
     if (oldVersion < 3) {
       await db.execute('ALTER TABLE baby_profile ADD COLUMN photoBase64 TEXT');
+    }
+    if (oldVersion < 4) {
+      await _createBabyPhotosTable(db);
     }
   }
 
@@ -136,6 +140,18 @@ class DatabaseHelper {
         category TEXT NOT NULL,
         achievedAt TEXT NOT NULL,
         notes TEXT
+      )
+    ''');
+  }
+
+  Future<void> _createBabyPhotosTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS baby_photos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        month INTEGER NOT NULL,
+        photoBase64 TEXT NOT NULL,
+        createdAt TEXT NOT NULL,
+        caption TEXT
       )
     ''');
   }
@@ -406,6 +422,37 @@ class DatabaseHelper {
       return await db.delete('milestones', where: 'id = ?', whereArgs: [id]);
     } catch (error) {
       throw Exception('Failed to delete milestone: $error');
+    }
+  }
+
+  Future<List<BabyPhoto>> getBabyPhotos() async {
+    try {
+      final db = await database;
+      final maps = await db.query(
+        'baby_photos',
+        orderBy: 'month ASC, createdAt DESC',
+      );
+      return maps.map(BabyPhoto.fromMap).toList();
+    } catch (error) {
+      throw Exception('Failed to load baby photos: $error');
+    }
+  }
+
+  Future<int> insertBabyPhoto(BabyPhoto photo) async {
+    try {
+      final db = await database;
+      return await db.insert('baby_photos', photo.toMap());
+    } catch (error) {
+      throw Exception('Failed to save baby photo: $error');
+    }
+  }
+
+  Future<int> deleteBabyPhoto(int id) async {
+    try {
+      final db = await database;
+      return await db.delete('baby_photos', where: 'id = ?', whereArgs: [id]);
+    } catch (error) {
+      throw Exception('Failed to delete baby photo: $error');
     }
   }
 }

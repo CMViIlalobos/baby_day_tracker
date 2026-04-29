@@ -192,3 +192,52 @@ class MilestoneEntry {
     );
   }
 }
+
+class BabyPhoto {
+  const BabyPhoto({
+    this.id,
+    required this.month,
+    required this.photoBase64,
+    required this.createdAt,
+    this.caption,
+  });
+
+  final int? id;
+  final int month;
+  final String photoBase64;
+  final DateTime createdAt;
+  final String? caption;
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'month': month,
+      'photoBase64': photoBase64,
+      'createdAt': createdAt.toIso8601String(),
+      'caption': caption,
+    };
+  }
+
+  factory BabyPhoto.fromMap(Map<String, dynamic> map) {
+    return BabyPhoto(
+      id: map['id'] as int?,
+      month: map['month'] as int? ?? 1,
+      photoBase64: map['photoBase64'] as String? ?? '',
+      createdAt:
+          DateTime.tryParse(map['createdAt'] as String? ?? '') ??
+          DateTime.now(),
+      caption: map['caption'] as String?,
+    );
+  }
+
+  Uint8List? get photoBytes {
+    if (photoBase64.isEmpty) {
+      return null;
+    }
+    try {
+      return base64Decode(photoBase64);
+    } catch (_) {
+      return null;
+    }
+  }
+}

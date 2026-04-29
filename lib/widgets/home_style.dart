@@ -200,7 +200,7 @@ class HomeStyleInfoCard extends StatelessWidget {
             ),
             child: Icon(icon, color: Colors.white, size: 22),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 10),
           Text(
             title,
             maxLines: 1,
@@ -211,7 +211,7 @@ class HomeStyleInfoCard extends StatelessWidget {
               fontWeight: FontWeight.w700,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Text(
             value,
             maxLines: 2,

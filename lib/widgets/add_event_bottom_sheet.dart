@@ -270,6 +270,7 @@ class _AddEventBottomSheetState extends State<AddEventBottomSheet> {
                 ),
                 const SizedBox(height: 18),
                 DropdownButtonFormField<EventType>(
+                  // ignore: deprecated_member_use
                   value: _selectedType,
                   decoration: const InputDecoration(labelText: 'Type'),
                   items:
@@ -413,6 +414,7 @@ class _AddEventBottomSheetState extends State<AddEventBottomSheet> {
         return Column(
           children: [
             DropdownButtonFormField<String>(
+              // ignore: deprecated_member_use
               value: _feedingSide,
               decoration: const InputDecoration(labelText: 'Side'),
               items:
@@ -437,6 +439,7 @@ class _AddEventBottomSheetState extends State<AddEventBottomSheet> {
         return Column(
           children: [
             DropdownButtonFormField<String>(
+              // ignore: deprecated_member_use
               value: _diaperType,
               decoration: const InputDecoration(labelText: 'Diaper type'),
               items:
@@ -480,6 +483,7 @@ class _AddEventBottomSheetState extends State<AddEventBottomSheet> {
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
+              // ignore: deprecated_member_use
               value: _medicineUnit,
               decoration: const InputDecoration(labelText: 'Unit'),
               items:

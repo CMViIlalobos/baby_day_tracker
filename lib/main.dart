@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
+
 import 'database/database_helper.dart';
 import 'models/baby_profile.dart';
 import 'screens/development_screen.dart';
 import 'screens/home_screen.dart';
-import 'screens/inventory_screen.dart';
+import 'screens/monthly_photos_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/stats_screen.dart';
 import 'theme/app_theme.dart';
-import 'utils/notification_helper.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -68,9 +68,8 @@ class _BabyDayTrackerAppState extends State<BabyDayTrackerApp> {
     });
   }
 
-  Future<void> _handleDataChanged() async {
+  Future<void> _handleProfileChanged() async {
     await _loadProfile();
-    await NotificationHelper.instance.syncProfileReminders(_profile);
     if (!mounted) {
       return;
     }
@@ -90,7 +89,7 @@ class _BabyDayTrackerAppState extends State<BabyDayTrackerApp> {
     final profile = _profile ?? BabyProfile.empty();
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Baby Day Tracker',
+      title: 'Baby First Year',
       theme: AppTheme.light(profile.themeColorValue),
       darkTheme: AppTheme.dark(profile.themeColorValue),
       themeMode: ThemeMode.system,
@@ -129,28 +128,19 @@ class _BabyDayTrackerAppState extends State<BabyDayTrackerApp> {
                   child: IndexedStack(
                     index: _selectedIndex,
                     children: [
-                      HomeScreen(
+                      ProfileScreen(
                         refreshTick: _refreshTick,
-                        babyName: profile.name,
                         profile: profile,
-                        onChanged: _handleDataChanged,
+                        onPreviewChanged: _handleProfilePreview,
+                        onChanged: _handleProfileChanged,
                       ),
                       StatsScreen(refreshTick: _refreshTick, profile: profile),
                       DevelopmentScreen(
                         refreshTick: _refreshTick,
                         profile: profile,
-                        onChanged: _handleDataChanged,
                       ),
-                      InventoryScreen(
-                        refreshTick: _refreshTick,
-                        onChanged: _handleDataChanged,
-                      ),
-                      ProfileScreen(
-                        refreshTick: _refreshTick,
-                        profile: profile,
-                        onPreviewChanged: _handleProfilePreview,
-                        onChanged: _handleDataChanged,
-                      ),
+                      MonthlyPhotosScreen(profile: profile),
+                      HomeScreen(profile: profile),
                     ],
                   ),
                 ),
@@ -163,24 +153,24 @@ class _BabyDayTrackerAppState extends State<BabyDayTrackerApp> {
                   },
                   destinations: const [
                     NavigationDestination(
-                      icon: Icon(Icons.home_rounded),
-                      label: 'Home',
+                      icon: Icon(Icons.child_care_rounded),
+                      label: 'Baby',
                     ),
                     NavigationDestination(
-                      icon: Icon(Icons.bar_chart_rounded),
-                      label: 'Stats',
-                    ),
-                    NavigationDestination(
-                      icon: Icon(Icons.insights_rounded),
+                      icon: Icon(Icons.show_chart_rounded),
                       label: 'Growth',
                     ),
                     NavigationDestination(
-                      icon: Icon(Icons.inventory_2_rounded),
-                      label: 'Inventory',
+                      icon: Icon(Icons.checklist_rounded),
+                      label: 'Milestones',
                     ),
                     NavigationDestination(
-                      icon: Icon(Icons.child_care_rounded),
-                      label: 'Baby',
+                      icon: Icon(Icons.photo_library_rounded),
+                      label: 'Photos',
+                    ),
+                    NavigationDestination(
+                      icon: Icon(Icons.menu_book_rounded),
+                      label: 'Guide',
                     ),
                   ],
                 ),

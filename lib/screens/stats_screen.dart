@@ -4,8 +4,6 @@ import 'package:intl/intl.dart';
 import '../database/database_helper.dart';
 import '../models/baby_profile.dart';
 import '../widgets/home_style.dart';
-import '../models/event.dart';
-import '../widgets/stats_chart.dart';
 
 class StatsScreen extends StatefulWidget {
   const StatsScreen({
@@ -22,59 +20,44 @@ class StatsScreen extends StatefulWidget {
 }
 
 class _StatsScreenState extends State<StatsScreen> {
+  final _heightController = TextEditingController();
+  final _weightController = TextEditingController();
   bool _isLoading = true;
-  late _StatsData _stats;
+  bool _isSaving = false;
+  List<GrowthEntry> _entries = const [];
 
   @override
   void initState() {
     super.initState();
-    _stats = _StatsData.empty();
-    _loadStats();
+    _loadEntries();
   }
 
   @override
   void didUpdateWidget(covariant StatsScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.refreshTick != widget.refreshTick ||
-        oldWidget.profile != widget.profile) {
-      _loadStats();
+    if (oldWidget.refreshTick != widget.refreshTick) {
+      _loadEntries();
     }
   }
 
-  Future<void> _loadStats() async {
+  @override
+  void dispose() {
+    _heightController.dispose();
+    _weightController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadEntries() async {
     setState(() {
       _isLoading = true;
     });
     try {
-      final now = DateTime.now();
-      final last24Hours = now.subtract(const Duration(hours: 24));
-      final sevenDaysAgo = DateTime(
-        now.year,
-        now.month,
-        now.day,
-      ).subtract(const Duration(days: 6));
-
-      final recentEvents = await DatabaseHelper.instance.getEventsBetween(
-        last24Hours,
-        now.add(const Duration(minutes: 1)),
-      );
-      final weekEvents = await DatabaseHelper.instance.getEventsBetween(
-        sevenDaysAgo,
-        now.add(const Duration(days: 1)),
-      );
-      final allEvents = await DatabaseHelper.instance.getAllEvents();
-      final lowStockItems = await DatabaseHelper.instance.getLowStockItems();
-
+      final entries = await DatabaseHelper.instance.getGrowthEntries();
       if (!mounted) {
         return;
       }
       setState(() {
-        _stats = _StatsData.fromEvents(
-          recentEvents: recentEvents,
-          weekEvents: weekEvents,
-          allEvents: allEvents,
-          lowStockCount: lowStockItems.length,
-        );
+        _entries = entries;
         _isLoading = false;
       });
     } catch (error) {
@@ -90,445 +73,439 @@ class _StatsScreenState extends State<StatsScreen> {
     }
   }
 
+  Future<void> _saveGrowth() async {
+    final height = double.tryParse(_heightController.text.trim());
+    final weight = double.tryParse(_weightController.text.trim());
+    if (height == null && weight == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter height or weight first')),
+      );
+      return;
+    }
+
+    setState(() {
+      _isSaving = true;
+    });
+    try {
+      await DatabaseHelper.instance.insertGrowthEntry(
+        GrowthEntry(
+          recordedAt: DateTime.now(),
+          heightCm: height,
+          weightKg: weight,
+        ),
+      );
+      _heightController.clear();
+      _weightController.clear();
+      await _loadEntries();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _deleteEntry(GrowthEntry entry) async {
+    final id = entry.id;
+    if (id == null) {
+      return;
+    }
+    try {
+      await DatabaseHelper.instance.deleteGrowthEntry(id);
+      await _loadEntries();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final currentMonth = _ageInMonths(widget.profile.birthDate);
+    final latest = _entries.isEmpty ? null : _entries.first;
+
     return RefreshIndicator(
-      onRefresh: _loadStats,
+      onRefresh: _loadEntries,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
         children: [
           HomeStylePageHeader(
-            eyebrow: 'Daily Insights',
-            title: 'Statistics',
-            subtitle: 'Care trends',
-            icon: Icons.bar_chart_rounded,
-            badge: _ageLabel(widget.profile.birthDate),
+            eyebrow: 'Growth Stats',
+            title: 'Height & Weight',
+            subtitle: 'Save monthly measurements',
+            icon: Icons.show_chart_rounded,
+            badge:
+                widget.profile.birthDate == null
+                    ? 'Age not set'
+                    : 'Month ${currentMonth.clamp(1, 12)}',
             gradient: const [
               Color(0xFFEAF6FF),
+              Color(0xFFE7F8EF),
               Color(0xFFFFF4E8),
-              Color(0xFFF8EEFF),
             ],
           ),
           const SizedBox(height: 20),
+          HomeStyleResponsiveGrid(
+            mainAxisExtent: 184,
+            children: [
+              HomeStyleInfoCard(
+                title: 'Latest height',
+                value:
+                    latest?.heightCm == null
+                        ? 'No entry'
+                        : '${latest!.heightCm!.toStringAsFixed(1)} cm',
+                subtitle:
+                    latest == null
+                        ? 'Add a measurement'
+                        : DateFormat('MMM d, y').format(latest.recordedAt),
+                icon: Icons.height_rounded,
+                gradientColors: const [Color(0xFFEAF6FF), Colors.white],
+                iconColor: const Color(0xFF2563EB),
+                labelColor: const Color(0xFF1D4ED8),
+                valueColor: const Color(0xFF1E3A8A),
+                subtitleColor: const Color(0xFF64748B),
+              ),
+              HomeStyleInfoCard(
+                title: 'Latest weight',
+                value:
+                    latest?.weightKg == null
+                        ? 'No entry'
+                        : '${latest!.weightKg!.toStringAsFixed(2)} kg',
+                subtitle:
+                    latest == null
+                        ? 'Add a measurement'
+                        : DateFormat('MMM d, y').format(latest.recordedAt),
+                icon: Icons.monitor_weight_rounded,
+                gradientColors: const [Color(0xFFFFF4E8), Colors.white],
+                iconColor: const Color(0xFFF97316),
+                labelColor: const Color(0xFFEA580C),
+                valueColor: const Color(0xFF9A3412),
+                subtitleColor: const Color(0xFF64748B),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          HomeStyleSurfaceCard(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Add Measurement',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _heightController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        decoration: const InputDecoration(
+                          labelText: 'Height',
+                          suffixText: 'cm',
+                          prefixIcon: Icon(Icons.height_rounded),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: _weightController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        decoration: const InputDecoration(
+                          labelText: 'Weight',
+                          suffixText: 'kg',
+                          prefixIcon: Icon(Icons.monitor_weight_rounded),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: _isSaving ? null : _saveGrowth,
+                    icon:
+                        _isSaving
+                            ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                            : const Icon(Icons.save_rounded),
+                    label: Text(_isSaving ? 'Saving...' : 'Save measurement'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          HomeStyleSectionHeader(
+            title: 'Saved Measurements',
+            subtitle: _entries.isEmpty ? 'No entries yet' : 'Latest first',
+          ),
+          const SizedBox(height: 12),
           if (_isLoading)
             const Padding(
-              padding: EdgeInsets.symmetric(vertical: 80),
+              padding: EdgeInsets.symmetric(vertical: 40),
               child: Center(child: CircularProgressIndicator()),
             )
-          else ...[
-            HomeStyleResponsiveGrid(
-              mainAxisExtent: 176,
+          else if (_entries.isEmpty)
+            const HomeStyleEmptyState(
+              icon: Icons.straighten_rounded,
+              title: 'No measurements yet',
+              description: 'Add height or weight to start the growth history.',
+            )
+          else
+            for (final entry in _entries)
+              _GrowthEntryCard(
+                entry: entry,
+                onDelete: () => _deleteEntry(entry),
+              ),
+          const SizedBox(height: 20),
+          HomeStyleSectionHeader(
+            title: 'Reference Bands',
+            subtitle: 'Broad P15-P85 guide by month',
+          ),
+          const SizedBox(height: 12),
+          HomeStyleSurfaceCard(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _StatCard(
-                  title: 'Feedings',
-                  value: '${_stats.totalFeedings}',
-                  subtitle: 'Last 24 hours',
-                  icon: Icons.restaurant_rounded,
-                  gradientColors: const [Color(0xFFFFF1F2), Color(0xFFFFE4E6)],
-                  iconColor: const Color(0xFFE11D48),
-                  labelColor: const Color(0xFFBE123C),
-                  valueColor: const Color(0xFF881337),
-                  subtitleColor: const Color(0xFFFB7185),
+                Text(
+                  'Use these as broad reference bands. Your pediatrician should interpret your baby\'s actual curve.',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
-                _StatCard(
-                  title: 'Diapers',
-                  value: '${_stats.totalDiapers}',
-                  subtitle:
-                      '${_stats.wetCount} wet • ${_stats.dirtyCount} dirty • ${_stats.bothCount} both',
-                  icon: Icons.baby_changing_station_rounded,
-                  gradientColors: const [Color(0xFFEFF6FF), Color(0xFFDBEAFE)],
-                  iconColor: const Color(0xFF2563EB),
-                  labelColor: const Color(0xFF1D4ED8),
-                  valueColor: const Color(0xFF1E3A8A),
-                  subtitleColor: const Color(0xFF60A5FA),
-                ),
-                _StatCard(
-                  title: 'Sleep',
-                  value: _stats.sleepHoursLabel,
-                  subtitle: 'Last 24 hours total',
-                  icon: Icons.bedtime_rounded,
-                  gradientColors: const [Color(0xFFFAF5FF), Color(0xFFF3E8FF)],
-                  iconColor: const Color(0xFFA855F7),
-                  labelColor: const Color(0xFF7E22CE),
-                  valueColor: const Color(0xFF4C1D95),
-                  subtitleColor: const Color(0xFFC084FC),
-                ),
-                _StatCard(
-                  title: 'Medicine',
-                  value: _stats.lastMedicineLabel,
-                  subtitle: 'Most recent dose',
-                  icon: Icons.medication_rounded,
-                  gradientColors: const [Color(0xFFECFDF5), Color(0xFFD1FAE5)],
-                  iconColor: const Color(0xFF10B981),
-                  labelColor: const Color(0xFF047857),
-                  valueColor: const Color(0xFF065F46),
-                  subtitleColor: const Color(0xFF34D399),
-                ),
+                const SizedBox(height: 16),
+                for (final row in _growthRows)
+                  _GrowthPercentileRow(
+                    row: row,
+                    isCurrentMonth:
+                        widget.profile.birthDate != null &&
+                        row.month == currentMonth.clamp(1, 12),
+                  ),
               ],
             ),
-            const SizedBox(height: 20),
-            HomeStyleSectionHeader(
-              title: 'Activity Trend',
-              subtitle: 'Last 7 days',
-            ),
-            const SizedBox(height: 12),
-            HomeStyleSurfaceCard(
-              padding: const EdgeInsets.all(20),
-              child: StatsChart(data: _stats.dailyEventCounts),
-            ),
-            const SizedBox(height: 16),
-            const HomeStyleSectionHeader(
-              title: 'Highlights',
-              subtitle: 'Key averages',
-            ),
-            const SizedBox(height: 12),
-            HomeStyleResponsiveGrid(
-              mainAxisExtent: 176,
-              children: [
-                _HighlightCard(
-                  title: 'Average sleep',
-                  value: _stats.averageSleepLabel,
-                  subtitle: '7-day average',
-                  icon: Icons.bedtime_rounded,
-                ),
-                _HighlightCard(
-                  title: 'Average feeds/day',
-                  value: _stats.averageFeedsLabel,
-                  subtitle: '7-day average',
-                  icon: Icons.restaurant_rounded,
-                ),
-                _HighlightCard(
-                  title: 'Longest sleep',
-                  value: _stats.longestSleepLabel,
-                  subtitle: 'Best stretch',
-                  icon: Icons.hotel_rounded,
-                ),
-                _HighlightCard(
-                  title: 'Care streak',
-                  value: _stats.trackingStreakLabel,
-                  subtitle: 'Active streak',
-                  icon: Icons.local_fire_department_rounded,
-                  alert: _stats.currentStreak == 0,
-                ),
-                _HighlightCard(
-                  title: 'Inventory alerts',
-                  value: '${_stats.lowStockCount}',
-                  subtitle: 'Low stock',
-                  icon: Icons.inventory_2_rounded,
-                  alert: _stats.lowStockCount > 0,
-                ),
-                _HighlightCard(
-                  title: 'Baby age',
-                  value: _ageLabel(widget.profile.birthDate),
-                  subtitle: 'Profile age',
-                  icon: Icons.child_friendly_rounded,
-                ),
-              ],
-            ),
-          ],
+          ),
         ],
       ),
     );
   }
 
-  String _ageLabel(DateTime? birthDate) {
+  int _ageInMonths(DateTime? birthDate) {
     if (birthDate == null) {
-      return 'Not set';
+      return 1;
     }
-    final days = DateTime.now().difference(birthDate).inDays;
-    final weeks = days ~/ 7;
-    final remainingDays = days % 7;
-    if (weeks > 0) {
-      return '$weeks w, $remainingDays d';
-    }
-    return '$days d';
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  const _StatCard({
-    required this.title,
-    required this.value,
-    required this.subtitle,
-    required this.icon,
-    required this.gradientColors,
-    required this.iconColor,
-    required this.labelColor,
-    required this.valueColor,
-    required this.subtitleColor,
-  });
-
-  final String title;
-  final String value;
-  final String subtitle;
-  final IconData icon;
-  final List<Color> gradientColors;
-  final Color iconColor;
-  final Color labelColor;
-  final Color valueColor;
-  final Color subtitleColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return HomeStyleInfoCard(
-      title: title,
-      value: value,
-      subtitle: subtitle,
-      icon: icon,
-      gradientColors: gradientColors,
-      iconColor: iconColor,
-      labelColor: labelColor,
-      valueColor: valueColor,
-      subtitleColor: subtitleColor,
-    );
-  }
-}
-
-class _HighlightCard extends StatelessWidget {
-  const _HighlightCard({
-    required this.title,
-    required this.value,
-    required this.subtitle,
-    required this.icon,
-    this.alert = false,
-  });
-
-  final String title;
-  final String value;
-  final String subtitle;
-  final IconData icon;
-  final bool alert;
-
-  @override
-  Widget build(BuildContext context) {
-    return HomeStyleInfoCard(
-      title: title,
-      value: value,
-      subtitle: subtitle,
-      icon: icon,
-      gradientColors:
-          alert
-              ? const [Color(0xFFFFF7ED), Color(0xFFFFEDD5)]
-              : const [Color(0xFFF5F3FF), Color(0xFFEDE9FE)],
-      iconColor: alert ? const Color(0xFFF97316) : const Color(0xFF8B5CF6),
-      labelColor: alert ? const Color(0xFF9A3412) : const Color(0xFF6D28D9),
-      valueColor: alert ? const Color(0xFF7C2D12) : const Color(0xFF4C1D95),
-      subtitleColor: alert ? const Color(0xFFEA580C) : const Color(0xFF8B5CF6),
-    );
-  }
-}
-
-class _StatsData {
-  const _StatsData({
-    required this.totalFeedings,
-    required this.totalDiapers,
-    required this.wetCount,
-    required this.dirtyCount,
-    required this.bothCount,
-    required this.totalSleepMinutes,
-    required this.lastMedicine,
-    required this.dailyEventCounts,
-    required this.averageSleepMinutes,
-    required this.averageFeedsPerDay,
-    required this.longestSleepMinutes,
-    required this.currentStreak,
-    required this.lowStockCount,
-  });
-
-  final int totalFeedings;
-  final int totalDiapers;
-  final int wetCount;
-  final int dirtyCount;
-  final int bothCount;
-  final int totalSleepMinutes;
-  final BabyEvent? lastMedicine;
-  final List<DailyCount> dailyEventCounts;
-  final double averageSleepMinutes;
-  final double averageFeedsPerDay;
-  final int longestSleepMinutes;
-  final int currentStreak;
-  final int lowStockCount;
-
-  factory _StatsData.empty() {
-    return const _StatsData(
-      totalFeedings: 0,
-      totalDiapers: 0,
-      wetCount: 0,
-      dirtyCount: 0,
-      bothCount: 0,
-      totalSleepMinutes: 0,
-      lastMedicine: null,
-      dailyEventCounts: [],
-      averageSleepMinutes: 0,
-      averageFeedsPerDay: 0,
-      longestSleepMinutes: 0,
-      currentStreak: 0,
-      lowStockCount: 0,
-    );
-  }
-
-  factory _StatsData.fromEvents({
-    required List<BabyEvent> recentEvents,
-    required List<BabyEvent> weekEvents,
-    required List<BabyEvent> allEvents,
-    required int lowStockCount,
-  }) {
-    final totalFeedings =
-        recentEvents.where((event) => event.type == EventType.feeding).length;
-    final diaperEvents =
-        recentEvents.where((event) => event.type == EventType.diaper).toList();
-    final totalSleepMinutes = recentEvents
-        .where((event) => event.type == EventType.sleep)
-        .fold<int>(0, (sum, event) => sum + (event.sleepDuration ?? 0));
-
     final now = DateTime.now();
-    final startDate = DateTime(
-      now.year,
-      now.month,
-      now.day,
-    ).subtract(const Duration(days: 6));
-
-    final dailyCounts = List<DailyCount>.generate(7, (index) {
-      final date = startDate.add(Duration(days: index));
-      final count =
-          weekEvents.where((event) {
-            final eventDate = DateTime(
-              event.timestamp.year,
-              event.timestamp.month,
-              event.timestamp.day,
-            );
-            return eventDate == date;
-          }).length;
-      return DailyCount(
-        label: DateFormat.E().format(date),
-        value: count.toDouble(),
-      );
-    });
-
-    final sleepByDay = List<int>.generate(7, (index) {
-      final date = startDate.add(Duration(days: index));
-      return weekEvents
-          .where((event) {
-            if (event.type != EventType.sleep) {
-              return false;
-            }
-            final eventDate = DateTime(
-              event.timestamp.year,
-              event.timestamp.month,
-              event.timestamp.day,
-            );
-            return eventDate == date;
-          })
-          .fold<int>(0, (sum, event) => sum + (event.sleepDuration ?? 0));
-    });
-
-    final feedByDay = List<int>.generate(7, (index) {
-      final date = startDate.add(Duration(days: index));
-      return weekEvents.where((event) {
-        final eventDate = DateTime(
-          event.timestamp.year,
-          event.timestamp.month,
-          event.timestamp.day,
-        );
-        return eventDate == date && event.type == EventType.feeding;
-      }).length;
-    });
-
-    final medicineEvents =
-        allEvents.where((event) => event.type == EventType.medicine).toList();
-    final sleepEvents =
-        allEvents.where((event) => event.type == EventType.sleep).toList();
-
-    return _StatsData(
-      totalFeedings: totalFeedings,
-      totalDiapers: diaperEvents.length,
-      wetCount: diaperEvents.where((event) => event.diaperType == 'Wet').length,
-      dirtyCount:
-          diaperEvents.where((event) => event.diaperType == 'Dirty').length,
-      bothCount:
-          diaperEvents.where((event) => event.diaperType == 'Both').length,
-      totalSleepMinutes: totalSleepMinutes,
-      lastMedicine: medicineEvents.isEmpty ? null : medicineEvents.first,
-      dailyEventCounts: dailyCounts,
-      averageSleepMinutes:
-          sleepByDay.fold<int>(0, (sum, minutes) => sum + minutes) / 7,
-      averageFeedsPerDay:
-          feedByDay.fold<int>(0, (sum, count) => sum + count) / 7,
-      longestSleepMinutes: sleepEvents.fold<int>(
-        0,
-        (max, event) =>
-            (event.sleepDuration ?? 0) > max ? (event.sleepDuration ?? 0) : max,
-      ),
-      currentStreak: _calculateStreak(allEvents),
-      lowStockCount: lowStockCount,
-    );
-  }
-
-  String get sleepHoursLabel =>
-      '${(totalSleepMinutes / 60).toStringAsFixed(1)} hrs';
-
-  String get averageSleepLabel =>
-      '${(averageSleepMinutes / 60).toStringAsFixed(1)} hrs/day';
-
-  String get averageFeedsLabel => averageFeedsPerDay.toStringAsFixed(1);
-
-  String get longestSleepLabel =>
-      longestSleepMinutes == 0
-          ? 'None yet'
-          : '${(longestSleepMinutes / 60).toStringAsFixed(1)} hrs';
-
-  String get trackingStreakLabel =>
-      currentStreak == 0 ? 'Start today' : '$currentStreak days';
-
-  String get lastMedicineLabel {
-    if (lastMedicine == null) {
-      return 'No dose yet';
+    var months = (now.year - birthDate.year) * 12 + now.month - birthDate.month;
+    if (now.day < birthDate.day) {
+      months--;
     }
-    final time = DateFormat('MMM d, h:mm a').format(lastMedicine!.timestamp);
-    final dose = [
-      if ((lastMedicine!.medicineDose ?? '').isNotEmpty)
-        lastMedicine!.medicineDose,
-      if ((lastMedicine!.medicineUnit ?? '').isNotEmpty)
-        lastMedicine!.medicineUnit,
-    ].join(' ');
-
-    String result = dose.isEmpty ? time : '$time $dose';
-    if (result.length > 25) {
-      result = result.substring(0, 22) + '...';
-    }
-    return result;
-  }
-
-  static int _calculateStreak(List<BabyEvent> allEvents) {
-    if (allEvents.isEmpty) {
-      return 0;
-    }
-    final uniqueDates =
-        allEvents
-            .map(
-              (event) => DateTime(
-                event.timestamp.year,
-                event.timestamp.month,
-                event.timestamp.day,
-              ),
-            )
-            .toSet()
-            .toList()
-          ..sort((a, b) => b.compareTo(a));
-
-    final today = DateTime.now();
-    var cursor = DateTime(today.year, today.month, today.day);
-    var streak = 0;
-    for (final date in uniqueDates) {
-      if (date == cursor) {
-        streak++;
-        cursor = cursor.subtract(const Duration(days: 1));
-      } else if (date.isAfter(cursor)) {
-        continue;
-      } else {
-        break;
-      }
-    }
-    return streak;
+    return months < 1 ? 1 : months;
   }
 }
+
+class _GrowthEntryCard extends StatelessWidget {
+  const _GrowthEntryCard({required this.entry, required this.onDelete});
+
+  final GrowthEntry entry;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return HomeStyleSurfaceCard(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  DateFormat('MMMM d, y').format(entry.recordedAt),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 8,
+                  children: [
+                    if (entry.heightCm != null)
+                      _MetricChip(
+                        label: 'Height',
+                        value: '${entry.heightCm!.toStringAsFixed(1)} cm',
+                      ),
+                    if (entry.weightKg != null)
+                      _MetricChip(
+                        label: 'Weight',
+                        value: '${entry.weightKg!.toStringAsFixed(2)} kg',
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Delete measurement',
+            onPressed: onDelete,
+            icon: const Icon(Icons.delete_outline_rounded),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GrowthPercentileRow extends StatelessWidget {
+  const _GrowthPercentileRow({required this.row, required this.isCurrentMonth});
+
+  final _GrowthRow row;
+  final bool isCurrentMonth;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color:
+            isCurrentMonth
+                ? scheme.primaryContainer.withValues(alpha: 0.55)
+                : scheme.surfaceContainerHighest.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color:
+              isCurrentMonth
+                  ? scheme.primary.withValues(alpha: 0.35)
+                  : scheme.outlineVariant,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Month ${row.month}',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              if (isCurrentMonth)
+                const HomeStylePill(
+                  label: 'Current',
+                  icon: Icons.today_rounded,
+                  backgroundColor: Colors.white,
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _MetricChip(label: 'Weight P15-P85', value: row.weightRange),
+              _MetricChip(label: 'Height P15-P85', value: row.heightRange),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MetricChip extends StatelessWidget {
+  const _MetricChip({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            value,
+            style: Theme.of(
+              context,
+            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GrowthRow {
+  const _GrowthRow({
+    required this.month,
+    required this.weightRange,
+    required this.heightRange,
+  });
+
+  final int month;
+  final String weightRange;
+  final String heightRange;
+}
+
+const _growthRows = [
+  _GrowthRow(month: 1, weightRange: '3.6-5.7 kg', heightRange: '51-58 cm'),
+  _GrowthRow(month: 2, weightRange: '4.4-6.8 kg', heightRange: '54-61 cm'),
+  _GrowthRow(month: 3, weightRange: '5.1-7.7 kg', heightRange: '57-64 cm'),
+  _GrowthRow(month: 4, weightRange: '5.6-8.4 kg', heightRange: '60-67 cm'),
+  _GrowthRow(month: 5, weightRange: '6.1-9.0 kg', heightRange: '62-69 cm'),
+  _GrowthRow(month: 6, weightRange: '6.4-9.5 kg', heightRange: '64-71 cm'),
+  _GrowthRow(month: 7, weightRange: '6.7-10.0 kg', heightRange: '65-73 cm'),
+  _GrowthRow(month: 8, weightRange: '7.0-10.4 kg', heightRange: '67-74 cm'),
+  _GrowthRow(month: 9, weightRange: '7.2-10.8 kg', heightRange: '68-76 cm'),
+  _GrowthRow(month: 10, weightRange: '7.5-11.1 kg', heightRange: '69-77 cm'),
+  _GrowthRow(month: 11, weightRange: '7.7-11.5 kg', heightRange: '71-79 cm'),
+  _GrowthRow(month: 12, weightRange: '7.9-11.8 kg', heightRange: '72-80 cm'),
+];

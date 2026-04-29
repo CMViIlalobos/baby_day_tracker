@@ -718,6 +718,7 @@ class _InventoryItemBottomSheetState extends State<_InventoryItemBottomSheet> {
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
+                  // ignore: deprecated_member_use
                   value: _category,
                   decoration: const InputDecoration(labelText: 'Category'),
                   items:
@@ -766,6 +767,7 @@ class _InventoryItemBottomSheetState extends State<_InventoryItemBottomSheet> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: DropdownButtonFormField<String>(
+                        // ignore: deprecated_member_use
                         value: _unit,
                         decoration: const InputDecoration(labelText: 'Unit'),
                         items:
