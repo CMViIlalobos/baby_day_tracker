@@ -157,44 +157,62 @@ class _StatsScreenState extends State<StatsScreen> {
             ],
           ),
           const SizedBox(height: 20),
-          HomeStyleResponsiveGrid(
-            mainAxisExtent: 184,
-            children: [
-              HomeStyleInfoCard(
-                title: 'Latest height',
-                value:
-                    latest?.heightCm == null
-                        ? 'No entry'
-                        : '${latest!.heightCm!.toStringAsFixed(1)} cm',
-                subtitle:
-                    latest == null
-                        ? 'Add a measurement'
-                        : DateFormat('MMM d, y').format(latest.recordedAt),
-                icon: Icons.height_rounded,
-                gradientColors: const [Color(0xFFEAF6FF), Colors.white],
-                iconColor: const Color(0xFF2563EB),
-                labelColor: const Color(0xFF1D4ED8),
-                valueColor: const Color(0xFF1E3A8A),
-                subtitleColor: const Color(0xFF64748B),
-              ),
-              HomeStyleInfoCard(
-                title: 'Latest weight',
-                value:
-                    latest?.weightKg == null
-                        ? 'No entry'
-                        : '${latest!.weightKg!.toStringAsFixed(2)} kg',
-                subtitle:
-                    latest == null
-                        ? 'Add a measurement'
-                        : DateFormat('MMM d, y').format(latest.recordedAt),
-                icon: Icons.monitor_weight_rounded,
-                gradientColors: const [Color(0xFFFFF4E8), Colors.white],
-                iconColor: const Color(0xFFF97316),
-                labelColor: const Color(0xFFEA580C),
-                valueColor: const Color(0xFF9A3412),
-                subtitleColor: const Color(0xFF64748B),
-              ),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final cards = [
+                _LatestMetricCard(
+                  title: 'Latest height',
+                  value:
+                      latest?.heightCm == null
+                          ? 'No entry'
+                          : '${latest!.heightCm!.toStringAsFixed(1)} cm',
+                  subtitle:
+                      latest == null
+                          ? 'Add a measurement'
+                          : DateFormat('MMM d, y').format(latest.recordedAt),
+                  icon: Icons.height_rounded,
+                  backgroundColor: const Color(0xFFEAF6FF),
+                  iconColor: const Color(0xFF2563EB),
+                  labelColor: const Color(0xFF1D4ED8),
+                  valueColor: const Color(0xFF1E3A8A),
+                ),
+                _LatestMetricCard(
+                  title: 'Latest weight',
+                  value:
+                      latest?.weightKg == null
+                          ? 'No entry'
+                          : '${latest!.weightKg!.toStringAsFixed(2)} kg',
+                  subtitle:
+                      latest == null
+                          ? 'Add a measurement'
+                          : DateFormat('MMM d, y').format(latest.recordedAt),
+                  icon: Icons.monitor_weight_rounded,
+                  backgroundColor: const Color(0xFFFFF4E8),
+                  iconColor: const Color(0xFFF97316),
+                  labelColor: const Color(0xFFEA580C),
+                  valueColor: const Color(0xFF9A3412),
+                ),
+              ];
+
+              if (constraints.maxWidth < 640) {
+                return Column(
+                  children: [
+                    for (var index = 0; index < cards.length; index++) ...[
+                      SizedBox(width: double.infinity, child: cards[index]),
+                      if (index != cards.length - 1) const SizedBox(height: 12),
+                    ],
+                  ],
+                );
+              }
+
+              return Row(
+                children: [
+                  Expanded(child: cards[0]),
+                  const SizedBox(width: 14),
+                  Expanded(child: cards[1]),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 16),
           HomeStyleSurfaceCard(
@@ -209,10 +227,10 @@ class _StatsScreenState extends State<StatsScreen> {
                   ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 14),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final fields = [
+                      TextField(
                         controller: _heightController,
                         keyboardType: const TextInputType.numberWithOptions(
                           decimal: true,
@@ -223,10 +241,7 @@ class _StatsScreenState extends State<StatsScreen> {
                           prefixIcon: Icon(Icons.height_rounded),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: TextField(
+                      TextField(
                         controller: _weightController,
                         keyboardType: const TextInputType.numberWithOptions(
                           decimal: true,
@@ -237,8 +252,26 @@ class _StatsScreenState extends State<StatsScreen> {
                           prefixIcon: Icon(Icons.monitor_weight_rounded),
                         ),
                       ),
-                    ),
-                  ],
+                    ];
+
+                    if (constraints.maxWidth < 520) {
+                      return Column(
+                        children: [
+                          fields[0],
+                          const SizedBox(height: 12),
+                          fields[1],
+                        ],
+                      );
+                    }
+
+                    return Row(
+                      children: [
+                        Expanded(child: fields[0]),
+                        const SizedBox(width: 12),
+                        Expanded(child: fields[1]),
+                      ],
+                    );
+                  },
                 ),
                 const SizedBox(height: 14),
                 SizedBox(
@@ -325,6 +358,101 @@ class _StatsScreenState extends State<StatsScreen> {
       months--;
     }
     return months < 1 ? 1 : months;
+  }
+}
+
+class _LatestMetricCard extends StatelessWidget {
+  const _LatestMetricCard({
+    required this.title,
+    required this.value,
+    required this.subtitle,
+    required this.icon,
+    required this.backgroundColor,
+    required this.iconColor,
+    required this.labelColor,
+    required this.valueColor,
+  });
+
+  final String title;
+  final String value;
+  final String subtitle;
+  final IconData icon;
+  final Color backgroundColor;
+  final Color iconColor;
+  final Color labelColor;
+  final Color valueColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      constraints: const BoxConstraints(minHeight: 112),
+      decoration: BoxDecoration(
+        color: backgroundColor.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: iconColor,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(icon, color: Colors.white, size: 24),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: labelColor,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: valueColor,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF64748B),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

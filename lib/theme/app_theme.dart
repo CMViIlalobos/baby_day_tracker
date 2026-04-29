@@ -5,14 +5,14 @@ import '../models/baby_profile.dart';
 class AppTheme {
   static ThemeData light(AppThemeColor accent) {
     final primary = _primaryForAccent(accent);
-    const background = Color(0xFFFFFFFF);
-    const foreground = Color(0xFF17171B);
-    const secondary = Color(0xFFF1F2F6);
-    const muted = Color(0xFFECECF0);
+    const background = Color(0xFFF4F5F7);
+    const foreground = Color(0xFF171A1D);
+    const secondary = Color(0xFFFFFFFF);
+    const muted = Color(0xFFEDEFF2);
     const mutedForeground = Color(0xFF717182);
     const destructive = Color(0xFFD4183D);
     const border = Color(0x1A000000);
-    const input = Color(0xFFF3F3F5);
+    const input = Color(0xFFFFFFFF);
     const card = Color(0xFFFFFFFF);
 
     final scheme = ColorScheme(
@@ -130,12 +130,12 @@ class AppTheme {
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          backgroundColor: primary,
+          backgroundColor: foreground,
           foregroundColor: Colors.white,
           elevation: 0,
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(24),
           ),
         ),
       ),
@@ -146,7 +146,7 @@ class AppTheme {
           side: const BorderSide(color: border),
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(24),
           ),
         ),
       ),
